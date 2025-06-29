@@ -21,7 +21,7 @@ class StatusQueryThread(QThread):
         self._running = True
 
     def run(self):
-        axes = ["X", "Ku", "K", "Ka", "Z"]
+        axes = ["X", "KU", "K", "KA", "Z"]
         axis_idx = 0
         while self._running:
             status = {"motion": {}, "src": {}}
@@ -278,7 +278,7 @@ class StatusPanel(QWidget):
         self.motion_grid.setSpacing(6)
         self.motion_grid.setVerticalSpacing(24)  # 增大竖向间距
         motion_layout.addLayout(self.motion_grid)
-        axes = ["X", "Ku", "K", "Ka", "Z"]
+        axes = ["X", "KU", "K", "KA", "Z"]
         self.motion_reach = {}
         self.motion_home = {}
         self.motion_speed = {}
@@ -348,7 +348,7 @@ class MainWindow(QMainWindow):
         self.status_thread = None
 
         self.status_cache = {
-            "motion": {axis: {"reach": "-", "home": "-", "speed": "-"} for axis in ["X", "Ku", "K", "Ka", "Z"]},
+            "motion": {axis: {"reach": "-", "home": "-", "speed": "-"} for axis in ["X", "KU", "K", "KA", "Z"]},
             "src": {"freq": "-", "power": "-", "rf": "-"}
         }
 
@@ -571,7 +571,7 @@ class MainWindow(QMainWindow):
         motion_group.setLayout(motion_layout)
         motion_layout.addWidget(QLabel("复位:"), 0, 0)
         self.home_combo = QComboBox()
-        self.home_combo.addItems(["X", "Ku", "K", "Ka", "ALL"])
+        self.home_combo.addItems(["X", "KU", "K", "KA", "ALL"])
         motion_layout.addWidget(self.home_combo, 0, 1)
         self.home_btn = QPushButton("执行复位")
         self.home_btn.clicked.connect(self.send_home_cmd)
@@ -581,7 +581,7 @@ class MainWindow(QMainWindow):
         motion_layout.addWidget(self.home_query_btn, 0, 3)
         motion_layout.addWidget(QLabel("达位:"), 1, 0)
         self.feed_combo = QComboBox()
-        self.feed_combo.addItems(["X", "Ku", "K", "Ka"])
+        self.feed_combo.addItems(["X", "KU", "K", "KA"])
         motion_layout.addWidget(self.feed_combo, 1, 1)
         self.feed_btn = QPushButton("执行达位")
         self.feed_btn.clicked.connect(self.send_feed_cmd)
@@ -592,7 +592,7 @@ class MainWindow(QMainWindow):
         motion_layout.addWidget(QLabel("速度:"), 2, 0)
         # 交换顺序：先模组名称，再挡位
         self.speed_mod_combo = QComboBox()
-        self.speed_mod_combo.addItems(["X", "Ku", "K", "Ka","Z"])
+        self.speed_mod_combo.addItems(["X", "KU", "K", "KA","Z"])
         motion_layout.addWidget(self.speed_mod_combo, 2, 1)
         self.speed_combo = QComboBox()
         self.speed_combo.addItems(["LOW", "MID1", "MID2", "MID3", "HIGH"])
@@ -779,7 +779,7 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage(message)
 
     def update_status_panel(self, status):
-        axes = ["X", "Ku", "K", "Ka", "Z"]
+        axes = ["X", "KU", "K", "KA", "Z"]
         # 更新缓存
         for axis in axes:
             if axis in status.get("motion", {}):
