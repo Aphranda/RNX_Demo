@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.pdb
+*.egg-info/
+dist/
+build/
+.eggs/
+*.log
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# Jupyter
+*.ipynb_checkpoints
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 环境/依赖
+.env
+.venv/
+env/
+venv/
+.idea/
+.Python
+
+# 临时文件
+*.bak
+*.tmp
+*.swp
+*.swo
+
+# 单元测试缓存
+htmlcov/
+.tox/
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# 本地配置
