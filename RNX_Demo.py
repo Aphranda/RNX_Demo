@@ -33,10 +33,24 @@ class StatusQueryThread(QThread):
                     reach = "NO Parameter"
                     home = self.query_status("READ:MOTion:HOME? ALL")
                     speed = self.query_status("READ:MOTion:SPEED? Z")
+                    if "timed out" in home.lower() or "error" in home.lower():
+                        home = self.query_status("READ:MOTion:HOME? ALL")
+                    if "timed out" in speed.lower() or "error" in speed.lower():
+                        speed = self.query_status("READ:MOTion:SPEED? Z")
+                    
                 else:
                     reach = self.query_status(f"READ:MOTion:FEED? {axis}")
                     home = self.query_status(f"READ:MOTion:HOME? {axis}")
                     speed = self.query_status(f"READ:MOTion:SPEED? {axis}")
+
+                    if "timed out" in reach.lower() or "error" in reach.lower():
+                        reach = self.query_status(f"READ:MOTion:FEED? {axis}")
+
+                    if "timed out" in home.lower() or "error" in home.lower():
+                        home = self.query_status(f"READ:MOTion:HOME? {axis}")
+                    if "timed out" in speed.lower() or "error" in speed.lower():
+                        speed = self.query_status(f"READ:MOTion:SPEED? {axis}")
+
                 status["motion"][axis] = {
                     "reach": reach,
                     "home": home,
@@ -65,7 +79,7 @@ class StatusQueryThread(QThread):
 
     def query_status(self, cmd):
         try:
-            with socket.create_connection((self.ip, self.port), timeout=2) as sock:
+            with socket.create_connection((self.ip, self.port), timeout=1) as sock:
                 sock.sendall((cmd + '\n').encode('utf-8'))
                 data = sock.recv(4096)
                 sock.close()
@@ -140,7 +154,7 @@ class TcpClient:
 class SimpleLinkDiagram(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumHeight(620)   # 原600，放大1.2倍
+        self.setMinimumHeight(600)   # 原600，放大1.2倍
         self.setMinimumWidth(500)    # 原500，放大1.2倍
         self.current_link = "FEED_X_THETA"
 
@@ -274,6 +288,9 @@ class StatusPanel(QWidget):
         self.motion_label = QLabel("")
         self.motion_label.setProperty("panelTitle", True)
         motion_layout.addWidget(self.motion_label)
+
+        motion_layout.addSpacing(-30)  # 减少标题与内容间距
+
         self.motion_grid = QGridLayout()
         self.motion_grid.setSpacing(6)
         self.motion_grid.setVerticalSpacing(6)  # 增大竖向间距
@@ -290,17 +307,18 @@ class StatusPanel(QWidget):
             self.motion_grid.addWidget(QLabel(axis), i+1, 0)
             self.motion_reach[axis] = QLabel("-")
             self.motion_reach[axis].setProperty("statusValue", True)
-            self.motion_reach[axis].setMinimumHeight(36)  # 增高
+            self.motion_reach[axis].setMinimumHeight(20)  # 增高
             self.motion_grid.addWidget(self.motion_reach[axis], i+1, 1)
             self.motion_home[axis] = QLabel("-")
             self.motion_home[axis].setProperty("statusValue", True)
-            self.motion_home[axis].setMinimumHeight(36)
+            self.motion_home[axis].setMinimumHeight(20)
             self.motion_grid.addWidget(self.motion_home[axis], i+1, 2)
             self.motion_speed[axis] = QLabel("-")
             self.motion_speed[axis].setProperty("statusValue", True)
-            self.motion_speed[axis].setMinimumHeight(36)
+            self.motion_speed[axis].setMinimumHeight(20)
             self.motion_grid.addWidget(self.motion_speed[axis], i+1, 3)
         motion_layout.addStretch()
+    
 
 
         # 信号源状态（独立外框）
@@ -309,6 +327,9 @@ class StatusPanel(QWidget):
         self.src_label = QLabel("")
         self.src_label.setProperty("panelTitle", True)
         src_layout.addWidget(self.src_label)
+
+        src_layout.addSpacing(-20)  # 减少标题与内容间距
+
         self.src_grid = QGridLayout()
         self.src_grid.setSpacing(6)
         src_layout.addLayout(self.src_grid)
@@ -336,7 +357,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("RNX Quantum Antenna Test System")
-        self.setGeometry(100, 100, 1800, 1200)
+        self.setGeometry(150, 40, 1600, 900)
         self.central_widget = QWidget(self)
         self.setCentralWidget(self.central_widget)
         self.status_bar = QStatusBar(self)
@@ -363,7 +384,7 @@ class MainWindow(QMainWindow):
             QGroupBox {
                 border: 2px solid #e0e0e0;
                 border-radius: 14px;
-                margin-top: 10px;
+                margin-top: 15px;
                 background: #ffffff;
                 font-weight: bold;
                 font-size: 24px;
@@ -487,6 +508,7 @@ class MainWindow(QMainWindow):
         status_layout.addWidget(self.status_panel)
         right_panel.addWidget(status_group)
 
+        right_panel.addSpacing(-15)  # 减少标题与内容间距
         # ETH设置
         eth_group = QGroupBox()
         eth_layout = QHBoxLayout()
@@ -606,19 +628,20 @@ class MainWindow(QMainWindow):
 
         main_layout.addLayout(right_panel, stretch=3)
 
-        # --- 标题 ---
-        title = QLabel("RNX量子天线测试系统控制Demo", self)
-        title.setFont(QFont("Microsoft YaHei", 32, QFont.Bold))
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # # --- 标题 ---
+        # title = QLabel("RNX量子天线测试系统控制Demo", self)
+        # title.setFont(QFont("Microsoft YaHei", 10, QFont.Bold))
+        # title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # 用一个总的垂直布局包裹标题和主布局
         layout = QVBoxLayout()
-        layout.addWidget(title)
+        # layout.addWidget(title)
         layout.addLayout(main_layout)
         self.central_widget.setLayout(layout)  # ← 这里设置布局
 
         # 状态栏初始信息
         self.show_status("系统就绪。")
+        self.log("系统启动。", "INFO")
 
     # --- 日志方法 ---
     def log(self, message, level="INFO"):
