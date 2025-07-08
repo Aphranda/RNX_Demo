@@ -140,8 +140,8 @@ class TcpClient:
 class SimpleLinkDiagram(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumHeight(720)   # 原600，放大1.2倍
-        self.setMinimumWidth(600)    # 原500，放大1.2倍
+        self.setMinimumHeight(620)   # 原600，放大1.2倍
+        self.setMinimumWidth(500)    # 原500，放大1.2倍
         self.current_link = "FEED_X_THETA"
 
     def set_link(self, link_mode):
@@ -166,7 +166,7 @@ class SimpleLinkDiagram(QLabel):
 
         # 参数（全部放大1.2倍）
         start_x = int(100)
-        start_y = int(120)
+        start_y = int(20)
         node_w = int(48)
         node_h = int(28)
         gap_y = int(44)
@@ -265,8 +265,8 @@ class StatusPanel(QWidget):
         super().__init__(parent)
         self.setMinimumWidth(240)
         h_layout = QHBoxLayout(self)
-        h_layout.setContentsMargins(18, 18, 18, 18)
-        h_layout.setSpacing(40)
+        h_layout.setContentsMargins(18, 5, 18, 5)
+        h_layout.setSpacing(10)
 
         # 运动模组状态（独立外框）
         motion_group = QGroupBox("运动模组状态")
@@ -276,7 +276,7 @@ class StatusPanel(QWidget):
         motion_layout.addWidget(self.motion_label)
         self.motion_grid = QGridLayout()
         self.motion_grid.setSpacing(6)
-        self.motion_grid.setVerticalSpacing(24)  # 增大竖向间距
+        self.motion_grid.setVerticalSpacing(6)  # 增大竖向间距
         motion_layout.addLayout(self.motion_grid)
         axes = ["X", "KU", "K", "KA", "Z"]
         self.motion_reach = {}
@@ -290,15 +290,15 @@ class StatusPanel(QWidget):
             self.motion_grid.addWidget(QLabel(axis), i+1, 0)
             self.motion_reach[axis] = QLabel("-")
             self.motion_reach[axis].setProperty("statusValue", True)
-            self.motion_reach[axis].setMinimumHeight(48)  # 增高
+            self.motion_reach[axis].setMinimumHeight(36)  # 增高
             self.motion_grid.addWidget(self.motion_reach[axis], i+1, 1)
             self.motion_home[axis] = QLabel("-")
             self.motion_home[axis].setProperty("statusValue", True)
-            self.motion_home[axis].setMinimumHeight(48)
+            self.motion_home[axis].setMinimumHeight(36)
             self.motion_grid.addWidget(self.motion_home[axis], i+1, 2)
             self.motion_speed[axis] = QLabel("-")
             self.motion_speed[axis].setProperty("statusValue", True)
-            self.motion_speed[axis].setMinimumHeight(48)
+            self.motion_speed[axis].setMinimumHeight(36)
             self.motion_grid.addWidget(self.motion_speed[axis], i+1, 3)
         motion_layout.addStretch()
 
@@ -325,7 +325,6 @@ class StatusPanel(QWidget):
         self.src_rf.setProperty("statusValue", True)
         self.src_grid.addWidget(self.src_rf, 2, 1)
         src_layout.addStretch()
-
 
         motion_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         src_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
@@ -364,12 +363,12 @@ class MainWindow(QMainWindow):
             QGroupBox {
                 border: 2px solid #e0e0e0;
                 border-radius: 14px;
-                margin-top: 14px;
+                margin-top: 10px;
                 background: #ffffff;
                 font-weight: bold;
                 font-size: 24px;
                 color: #222;
-                padding: 10px;
+                padding: 8px;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
@@ -377,7 +376,7 @@ class MainWindow(QMainWindow):
                 top: 6px;
                 padding: 0 8px 0 8px;
                 color: #42a5f5;
-                font-size: 24px;
+                font-size: 20px;
                 font-weight: bold;
             }
             QLabel[panelTitle="true"] {
@@ -394,7 +393,7 @@ class MainWindow(QMainWindow):
                 border: 2px solid #42a5f5;
                 border-radius: 8px;
                 background: #f5faff;
-                padding: 4px 12px;
+                padding: 4px 10px;
                 min-width: 60px;
                 min-height: 24px;
                 font-size: 24px;
@@ -413,7 +412,7 @@ class MainWindow(QMainWindow):
             QComboBox {
                 border: 2px solid #b0b0b0;
                 border-radius: 8px;
-                padding: 4px 12px 4px 8px;
+                padding: 4px 8px 4px 8px;
                 background: #f9f9f9;
                 font-size: 24px;
                 min-height: 28px;
@@ -874,6 +873,10 @@ class MainWindow(QMainWindow):
         self.status_panel.src_label.setStyleSheet("color: #228B22;")
 
 if __name__ == "__main__":
+
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
+
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
