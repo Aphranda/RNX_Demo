@@ -59,12 +59,18 @@ class StatusQueryThread(QThread):
                 # 每次查一个信号源参数
                 if axis_idx == 0:
                     freq = self.query_status("READ:SOURce:FREQuency?")
+                    if "timed out" in freq.lower() or "error" in freq.lower():
+                        freq = self.query_status("READ:SOURce:FREQuency?")
                     status["src"]["freq"] = freq
                 elif axis_idx == 1:
                     power = self.query_status("READ:SOURce:POWer?")
+                    if "timed out" in power.lower() or "error" in power.lower():
+                        power = self.query_status("READ:SOURce:POWer?")
                     status["src"]["power"] = power
                 elif axis_idx == 2:
                     rf = self.query_status("READ:SOURce:OUTPut?")
+                    if "timed out" in rf.lower() or "error" in rf.lower():
+                        rf = self.query_status("READ:SOURce:OUTPut?")
                     status["src"]["rf"] = rf
             finally:
                 self.mutex.unlock()
@@ -357,7 +363,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("RNX Quantum Antenna Test System")
-        self.setGeometry(150, 40, 1600, 900)
+        self.setGeometry(150, 40, 1600, 1100)
         self.central_widget = QWidget(self)
         self.setCentralWidget(self.central_widget)
         self.status_bar = QStatusBar(self)
@@ -896,9 +902,6 @@ class MainWindow(QMainWindow):
         self.status_panel.src_label.setStyleSheet("color: #228B22;")
 
 if __name__ == "__main__":
-
-    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
-    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
 
     app = QApplication(sys.argv)
     window = MainWindow()
