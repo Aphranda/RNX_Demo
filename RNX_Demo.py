@@ -337,8 +337,11 @@ class SimpleLinkDiagram(QLabel):
         self.current_link = "FEED_X_THETA"
 
     def set_link(self, link_mode):
-        self.current_link = link_mode
+        # 确保链路模式与类中定义的名称一致
+        normalized_link = link_mode.upper().replace("__", "_")  # 处理可能的双下划线
+        self.current_link = normalized_link
         self.update()
+
 
     def paintEvent(self, a0):
         super().paintEvent(a0)
@@ -367,12 +370,12 @@ class SimpleLinkDiagram(QLabel):
         node_list = [
             ("X_THETA", "FEED_X_THETA"),
             ("X_PHI", "FEED_X_PHI"),
-            ("Ku_THETA", "FEED_Ku_THETA"),
-            ("Ku_PHI", "FEED_Ku_PHI"),
+            ("KU_THETA", "FEED_KU_THETA"),
+            ("KU_PHI", "FEED_KU_PHI"),
             ("K_THETA", "FEED_K_THETA"),
-            ("K_PHI", "FEED_K__PHI"),
-            ("Ka_THETA", "FEED_Ka_THETA"),
-            ("Ka_PHI", "FEED_Ka_PHI"),
+            ("K_PHI", "FEED_K_PHI"),
+            ("KA_THETA", "FEED_KA_THETA"),
+            ("KA_PHI", "FEED_KA_PHI"),
         ]
 
         # 画COM节点阴影
@@ -534,7 +537,7 @@ class StatusPanel(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("RNX Quantum Antenna Test System")
+        self.setWindowTitle("RNX Quantum Antenna Test System - Demo")
         self.setGeometry(150, 40, 1600, 1100)
         self.central_widget = QWidget(self)
         self.setCentralWidget(self.central_widget)
@@ -709,14 +712,15 @@ class MainWindow(QMainWindow):
         eth_layout.addStretch()
         right_panel.addWidget(eth_group)
 
+
         # 链路控制
         link_ctrl_group = QGroupBox("链路控制")
         link_ctrl_layout = QHBoxLayout()
         link_ctrl_group.setLayout(link_ctrl_layout)
         self.link_mode_combo = QComboBox()
         self.link_mode_combo.addItems([
-            "FEED_X_THETA", "FEED_X_PHI", "FEED_Ku_THETA", "FEED_Ku_PHI",
-            "FEED_K_THETA", "FEED_K__PHI", "FEED_Ka_THETA", "FEED_Ka_PHI"
+            "FEED_X_THETA", "FEED_X_PHI", "FEED_KU_THETA", "FEED_KU_PHI",
+            "FEED_K_THETA", "FEED_K_PHI", "FEED_KA_THETA", "FEED_KA_PHI"
         ])
         link_ctrl_layout.addWidget(QLabel("链路模式:"))
         link_ctrl_layout.addWidget(self.link_mode_combo)
@@ -825,6 +829,22 @@ class MainWindow(QMainWindow):
     def log(self, message, level="INFO"):
         self.log_output.log(message, level)
 
+    # --- 链路映射 ---
+    def parse_link_response(self, response):
+        """解析链路查询结果"""
+        link_mapping = {
+            "LF_PORT1,RF_COM": "FEED_X_THETA",
+            "LF_PORT2,RF_COM": "FEED_X_PHI",
+            "LF_PORT3,RF_COM": "FEED_KU_THETA",
+            "LF_PORT4,RF_COM": "FEED_KU_PHI",
+            "HF_PORT1,RF_COM": "FEED_K_THETA",
+            "HF_PORT2,RF_COM": "FEED_K_PHI",
+            "HF_PORT3,RF_COM": "FEED_KA_THETA",
+            "HF_PORT4,RF_COM": "FEED_KA_PHI"
+        }
+        return link_mapping.get(response.strip(), "FEED_X_THETA")  # 默认返回X_THETA
+
+
     # --- ETH连接 ---
     def connect_eth(self):
         ip = self.eth_ip_input.text().strip()
@@ -846,8 +866,11 @@ class MainWindow(QMainWindow):
             self.status_thread = StatusQueryThread(ip, port, self.comm_mutex)
             self.status_thread.status_signal.connect(self.update_status_panel)
             self.status_thread.start()
+            # 连接成功后自动查询一次链路状态
+            self.query_link_cmd()
         else:
             self.log(f"连接失败: {message}", "ERROR")
+
 
     def disconnect_eth(self):
         if self.tcp_client.connected:
@@ -870,9 +893,40 @@ class MainWindow(QMainWindow):
         self.link_diagram.set_link(mode)  # 动态刷新链路图
         self.send_and_log(cmd)
 
+    # --- 链路查询 ---
     def query_link_cmd(self):
         cmd = "READ:LINK:STATe?"
-        self.send_and_log(cmd)
+        # 优先暂停状态线程，防止抢占
+        if self.status_thread and self.status_thread.isRunning():
+            self.status_thread._running = False
+            self.status_thread.wait()
+        
+        self.comm_mutex.lock()
+        try:
+            self.log(cmd, "SEND")
+            success, msg = self.tcp_client.send(cmd + '\n')
+            if not success:
+                self.log(f"发送失败: {msg}", "ERROR")
+                self.show_status(msg)
+                return
+            
+            success, resp = self.tcp_client.receive()
+            if success:
+                self.log(resp, "RECV")
+                # 解析响应并更新链路图
+                current_link = self.parse_link_response(resp)
+                self.link_diagram.set_link(current_link)
+                self.show_status(f"当前链路: {current_link}")
+            else:
+                self.log(f"接收失败: {resp}", "ERROR")
+                self.show_status(resp)
+        finally:
+            self.comm_mutex.unlock()
+            # 手动指令完成后重启状态线程
+            if self.status_thread:
+                self.status_thread._running = True
+                self.status_thread.start()
+
 
     def send_freq_cmd(self):
         val = self.freq_input.text().strip()
@@ -1047,6 +1101,8 @@ class MainWindow(QMainWindow):
 
         # 信号源
         src = self.status_cache["src"]
+        # ==== 新增：状态颜色设置 ====
+        
         # ==== 新增：格式化频率和功率 ====
         def format_freq(freq_str):
             try:
@@ -1074,8 +1130,19 @@ class MainWindow(QMainWindow):
         power_disp = format_power(src.get("power", "-"))
         self.status_panel.src_power.setText(power_disp)
         set_status_color(self.status_panel.src_power, power_disp)
-        self.status_panel.src_rf.setText(src.get("rf", "-"))
-        set_status_color(self.status_panel.src_rf, src.get("rf", "-"))
+
+        # RF输出显示 - 直接添加条件判断
+        rf_status = src.get("rf", "-")
+        self.status_panel.src_rf.setText(rf_status)
+        if rf_status.upper() == "ON":
+            self.status_panel.src_rf.setStyleSheet(
+                "background:#b6f5c6; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
+            )
+        else:
+            # 使用默认样式
+            self.status_panel.src_rf.setStyleSheet(
+                "background:#f5faff; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
+            )
 
         # 更新状态标签显示
         if self.status_thread and self.status_thread.current_operation:
@@ -1102,6 +1169,10 @@ class MainWindow(QMainWindow):
         # 信号源状态标签保持不变
         self.status_panel.src_label.setText("信号源状态更新中...")
         self.status_panel.src_label.setStyleSheet("color: #228B22;")
+
+
+
+
 
 def count_current_process_instances():
     current_pid = os.getpid()  # 当前进程PID
