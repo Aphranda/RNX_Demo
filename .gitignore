@@ -10,6 +10,7 @@ dist/
 build/
 .eggs/
 *.log
+*.spec
 
 # VSCode
 .vscode/
