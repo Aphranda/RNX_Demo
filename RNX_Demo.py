@@ -19,7 +19,8 @@ class StatusQueryThread(QThread):
         self.port = int(port)
         self.mutex = mutex
         self._running = True
-        self.Is_moving = False  # 新增标志位
+        self.current_operation = None  # 新增：当前操作状态
+        self.operating_axis = None    # 新增：当前操作的轴
 
     def run(self):
         axes = ["X", "KU", "K", "KA", "Z"]
@@ -909,6 +910,10 @@ class MainWindow(QMainWindow):
     def send_home_cmd(self):
         val = self.home_combo.currentText()
         cmd = f"MOTion:HOME {val}"
+        # 设置操作状态
+        if self.status_thread:
+            self.status_thread.current_operation = "HOMING"
+            self.status_thread.operating_axis = val
         self.send_and_log(cmd)
 
     def query_home_cmd(self):
@@ -919,6 +924,10 @@ class MainWindow(QMainWindow):
     def send_feed_cmd(self):
         val = self.feed_combo.currentText()
         cmd = f"MOTion:FEED {val}"
+        # 设置操作状态
+        if self.status_thread:
+            self.status_thread.current_operation = "FEEDING"
+            self.status_thread.operating_axis = val
         self.send_and_log(cmd)
 
     def query_feed_cmd(self):
@@ -1068,8 +1077,29 @@ class MainWindow(QMainWindow):
         self.status_panel.src_rf.setText(src.get("rf", "-"))
         set_status_color(self.status_panel.src_rf, src.get("rf", "-"))
 
-        self.status_panel.motion_label.setText("运动状态更新中...")
-        self.status_panel.motion_label.setStyleSheet("color: #228B22;")
+        # 更新状态标签显示
+        if self.status_thread and self.status_thread.current_operation:
+            operation = self.status_thread.current_operation
+            axis = self.status_thread.operating_axis
+            if operation == "HOMING":
+                self.status_panel.motion_label.setText(f"{axis}轴复位中...")
+                self.status_panel.motion_label.setStyleSheet("color: #ff8f00;")  # 橙色
+            elif operation == "FEEDING":
+                self.status_panel.motion_label.setText(f"{axis}轴达位中...")
+                self.status_panel.motion_label.setStyleSheet("color: #ff8f00;")  # 橙色
+            # 检查操作是否完成
+            axis_status = self.status_cache["motion"].get(axis, {})
+            if (operation == "HOMING" and "OK" in axis_status.get("home", "")) or \
+            (operation == "FEEDING" and "OK" in axis_status.get("reach", "")):
+                self.status_thread.current_operation = None
+                self.status_thread.operating_axis = None
+                self.status_panel.motion_label.setText("运动状态: 就绪")
+                self.status_panel.motion_label.setStyleSheet("color: #228B22;")  # 绿色
+        else:
+            self.status_panel.motion_label.setText("运动状态: 就绪")
+            self.status_panel.motion_label.setStyleSheet("color: #228B22;")  # 绿色
+        
+        # 信号源状态标签保持不变
         self.status_panel.src_label.setText("信号源状态更新中...")
         self.status_panel.src_label.setStyleSheet("color: #228B22;")
 
