@@ -12,6 +12,7 @@ build/
 *.log
 *.spec
 *.csv*
+*.bin
 
 # VSCode
 .vscode/

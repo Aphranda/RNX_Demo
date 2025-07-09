@@ -16,6 +16,7 @@ import datetime
 import threading
 from typing import Dict, List, Optional, Tuple, Union
 from datetime import datetime, timezone
+import json,struct
 
 
 class StatusQueryThread(QThread):
@@ -911,12 +912,55 @@ class MainWindow(QMainWindow):
             self.show_status("未连接到设备。")
             self.log("未连接到设备。", "WARNING")
     
-    def load_calibration_file(self):
+    # def load_calibration_file(self):
+    #     """加载校准文件"""
+    #     from PyQt5.QtWidgets import QFileDialog
+
+    #     # 获取最近校准文件目录
+    #     cal_dir = "calibrations"  # 默认目录
+    #     if hasattr(self, 'cal_manager'):
+    #         cal_dir = self.cal_manager.base_dir
+        
+    #     # 打开文件选择对话框
+    #     file_path, _ = QFileDialog.getOpenFileName(
+    #         self, 
+    #         "选择校准文件", 
+    #         cal_dir, 
+    #         "校准文件 (*.csv);;所有文件 (*)"
+    #     )
+        
+    #     if file_path:
+    #         self.status_panel.cal_file_input.setText(file_path)
+    #         self.log(f"已选择校准文件: {file_path}", "INFO")
+            
+    #         # 验证文件
+    #         if not hasattr(self, 'cal_manager'):
+    #             self.cal_manager = CalibrationFileManager(log_callback=self.log)
+                
+    #         if self.cal_manager.validate_calibration_file(file_path):
+    #             self.status_panel.cal_file_status.setText("已加载")
+    #             self.status_panel.cal_file_status.setStyleSheet(
+    #                 "background:#b6f5c6; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
+    #             )
+    #             self.show_status(f"校准文件有效: {os.path.basename(file_path)}")
+    #             self.log("校准文件验证通过", "SUCCESS")
+                
+    #             # 这里可以添加实际加载校准数据的逻辑
+    #             # 例如: self.load_calibration_data(file_path)
+    #         else:
+    #             self.status_panel.cal_file_status.setText("无效")
+    #             self.status_panel.cal_file_status.setStyleSheet(
+    #                 "background:#ffcdd2; color:#d32f2f; border:2px solid #0078d7; border-radius:8px;"
+    #             )
+    #             self.show_status("校准文件无效")
+    #             self.log("校准文件验证失败", "ERROR")
+
+    def load_calibration_file(self, filepath: str):
         """加载校准文件"""
         from PyQt5.QtWidgets import QFileDialog
 
         cal = CalibrationFileManager(log_callback=self.log)
-    
+        
         # 获取最近校准文件目录
         cal_dir = "calibrations"  # 默认目录
         if hasattr(self, 'cal_manager'):
@@ -927,7 +971,7 @@ class MainWindow(QMainWindow):
             self, 
             "选择校准文件", 
             cal_dir, 
-            "校准文件 (*.csv);;所有文件 (*)"
+            "校准文件 (*.csv *.bin);;所有文件 (*)"
         )
         
         if file_path:
@@ -937,6 +981,12 @@ class MainWindow(QMainWindow):
             # 验证文件
             if not hasattr(self, 'cal_manager'):
                 self.cal_manager = CalibrationFileManager(log_callback=self.log)
+            
+            # 打印文件内容验证
+            if file_path.lower().endswith('.bin'):
+                self._print_bin_file_contents(file_path)  # 调用解耦后的BIN文件打印函数
+            elif file_path.lower().endswith('.csv'):
+                self._print_csv_file_contents(file_path)
                 
             if self.cal_manager.validate_calibration_file(file_path):
                 self.status_panel.cal_file_status.setText("已加载")
@@ -945,9 +995,6 @@ class MainWindow(QMainWindow):
                 )
                 self.show_status(f"校准文件有效: {os.path.basename(file_path)}")
                 self.log("校准文件验证通过", "SUCCESS")
-                
-                # 这里可以添加实际加载校准数据的逻辑
-                # 例如: self.load_calibration_data(file_path)
             else:
                 self.status_panel.cal_file_status.setText("无效")
                 self.status_panel.cal_file_status.setStyleSheet(
@@ -955,6 +1002,106 @@ class MainWindow(QMainWindow):
                 )
                 self.show_status("校准文件无效")
                 self.log("校准文件验证失败", "ERROR")
+
+    def _print_bin_file_contents(self, bin_path: str):
+        """打印BIN文件内容用于验证数据正确性"""
+        try:
+            result = self.cal_manager._read_bin_file(bin_path)
+            if not result:
+                self.log("无法读取BIN文件内容", "ERROR")
+                return
+                
+            meta = result['meta']
+            data_points = result['data']
+            
+            self.log("\n=== BIN文件元数据 ===", "INFO")
+            self.log(f"创建时间: {meta.get('created', '未知')}", "INFO")
+            self.log(f"操作员: {meta.get('operator', '未知')}", "INFO")
+            self.log(f"信号源: {meta.get('signal_gen', ['未知', '未知'])[0]} (SN: {meta.get('signal_gen', ['', '未知'])[1]})", "INFO")
+            self.log(f"频谱分析仪: {meta.get('spec_analyzer', ['未知', '未知'])[0]} (SN: {meta.get('spec_analyzer', ['', '未知'])[1]})", "INFO")
+            self.log(f"天线: {meta.get('antenna', ['未知', '未知'])[0]} (SN: {meta.get('antenna', ['', '未知'])[1]})", "INFO")
+            self.log(f"环境: {meta.get('environment', [0, 0])[0]}°C, {meta.get('environment', [0, 0])[1]}%RH", "INFO")
+            
+            freq_params = meta.get('freq_params', {})
+            self.log("\n=== 频率参数 ===", "INFO")
+            self.log(f"起始频率: {freq_params.get('start_ghz', '未知')} GHz", "INFO")
+            self.log(f"终止频率: {freq_params.get('stop_ghz', '未知')} GHz", "INFO")
+            self.log(f"步进: {freq_params.get('step_ghz', '未知')} GHz", "INFO")
+            self.log(f"点数: {meta.get('points', '未知')}", "INFO")
+            
+            self.log("\n=== 数据点示例 ===", "INFO")
+            if data_points:
+                # 打印前5个点
+                self.log("前5个数据点:", "INFO")
+                for i, point in enumerate(data_points[:5]):
+                    self.log(
+                        f"点 {i}: 频率={point['freq']:.3f}GHz, "
+                        f"Xθ={point['x_theta']:.2f}, Xφ={point['x_phi']:.2f}, "
+                        f"KUθ={point['ku_theta']:.2f}, KUφ={point['ku_phi']:.2f}, "
+                        f"Kθ={point['k_theta']:.2f}, Kφ={point['k_phi']:.2f}, "
+                        f"KAθ={point['ka_theta']:.2f}, KAφ={point['ka_phi']:.2f}", 
+                        "INFO"
+                    )
+                
+                # 打印后5个点（如果存在）
+                if len(data_points) > 5:
+                    self.log("\n最后5个数据点:", "INFO")
+                    for i, point in enumerate(data_points[-5:], len(data_points)-5):
+                        self.log(
+                            f"点 {i}: 频率={point['freq']:.3f}GHz, "
+                            f"Xθ={point['x_theta']:.2f}, Xφ={point['x_phi']:.2f}, "
+                            f"KUθ={point['ku_theta']:.2f}, KUφ={point['ku_phi']:.2f}, "
+                            f"Kθ={point['k_theta']:.2f}, Kφ={point['k_phi']:.2f}, "
+                            f"KAθ={point['ka_theta']:.2f}, KAφ={point['ka_phi']:.2f}", 
+                            "INFO"
+                        )
+            
+            self.log("\n=== 总结 ===", "INFO")
+            self.log(f"总数据点数: {len(data_points)}", "INFO")
+            self.log(f"预期点数: {meta.get('points', '未知')}", "INFO")
+            if len(data_points) == meta.get('points', -1):
+                self.log("数据点数匹配", "SUCCESS")
+            else:
+                self.log("数据点数不匹配", "ERROR")
+        
+        except Exception as e:
+            self.log(f"读取BIN文件失败: {str(e)}", "ERROR")
+
+    def _print_csv_file_contents(self, csv_path: str):
+        """打印CSV文件内容用于验证数据正确性"""
+        try:
+            with open(csv_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            self.log("\n=== CSV文件内容 ===", "INFO")
+            
+            # 打印前10行（通常是元数据和标题）
+            self.log("文件头:", "INFO")
+            for line in lines[:10]:
+                if line.strip():  # 跳过空行
+                    self.log(line.strip(), "INFO")
+            
+            # 打印数据部分的前5行和后5行
+            data_lines = [line for line in lines if not line.startswith('!') and line.strip()]
+            if len(data_lines) > 1:  # 第一行是标题
+                self.log("\n数据前5行:", "INFO")
+                for line in data_lines[1:6]:
+                    self.log(line.strip(), "INFO")
+                
+                if len(data_lines) > 6:
+                    self.log("\n数据后5行:", "INFO")
+                    for line in data_lines[-5:]:
+                        self.log(line.strip(), "INFO")
+            
+            # 打印文件统计信息
+            self.log("\n=== 文件统计 ===", "INFO")
+            self.log(f"总行数: {len(lines)}", "INFO")
+            self.log(f"数据行数: {len(data_lines)-1}", "INFO")  # 减去标题行
+            self.log(f"文件大小: {os.path.getsize(csv_path)/1024:.2f} KB", "INFO")
+            
+        except Exception as e:
+            self.log(f"读取CSV文件失败: {str(e)}", "ERROR")
+
 
     # --- 指令组合与发送 ---
     def send_link_cmd(self):
@@ -1273,6 +1420,94 @@ class CalibrationFileManager:
         """默认日志记录器"""
         print(f"[CAL {level}] {msg}")
 
+    def _generate_bin_filename(self, csv_path: str) -> str:
+        """根据CSV路径生成对应的BIN文件名"""
+        base, ext = os.path.splitext(csv_path)
+        return base + ".bin"
+    
+    def _write_bin_file(self, csv_path: str):
+        """将CSV数据写入BIN文件"""
+        bin_path = self._generate_bin_filename(csv_path)
+        
+        # 二进制文件结构：
+        # 头部: 4字节幻数(0x524E5843 'RNXC') + 1字节版本(1)
+        # 元数据: JSON格式的字符串(UTF-8编码)
+        # 数据: 每个数据点9个float32(频率 + 8个参数)
+        
+        try:
+            with open(bin_path, 'wb') as f:
+                # 写入头部
+                f.write(b'RNXC')  # 幻数
+                f.write(bytes([1]))  # 版本号
+                
+                # 写入元数据
+                meta_json = json.dumps(self.current_meta).encode('utf-8')
+                f.write(len(meta_json).to_bytes(4, 'little'))  # 元数据长度
+                f.write(meta_json)  # 元数据内容
+                
+                # 写入数据点
+                for point in self._data_points:
+                    freq = point['freq']
+                    data = [
+                        point['x_theta'], point['x_phi'],
+                        point['ku_theta'], point['ku_phi'],
+                        point['k_theta'], point['k_phi'],
+                        point['ka_theta'], point['ka_phi']
+                    ]
+                    # 写入频率(1个float32)和8个参数(8个float32)
+                    f.write(struct.pack('f', freq))
+                    f.write(struct.pack('8f', *data))
+                
+            self.log(f"已生成二进制校准文件: {os.path.basename(bin_path)}", "INFO")
+            return bin_path
+        except Exception as e:
+            self.log(f"生成二进制文件失败: {str(e)}", "ERROR")
+            return None
+        
+    def _read_bin_file(self, bin_path: str) -> Optional[Dict]:
+        """读取BIN格式校准文件"""
+        try:
+            with open(bin_path, 'rb') as f:
+                # 验证头部
+                magic = f.read(4)
+                if magic != b'RNXC':
+                    raise ValueError("无效的二进制文件格式")
+                
+                version = ord(f.read(1))
+                if version != 1:
+                    raise ValueError(f"不支持的版本号: {version}")
+                
+                # 读取元数据
+                meta_len = int.from_bytes(f.read(4), 'little')
+                meta_json = f.read(meta_len).decode('utf-8')
+                meta = json.loads(meta_json)
+                
+                # 读取数据点
+                data_points = []
+                while True:
+                    freq_bytes = f.read(4)
+                    if not freq_bytes:
+                        break
+                    
+                    freq = struct.unpack('f', freq_bytes)[0]
+                    data = struct.unpack('8f', f.read(32))  # 8个float32=32字节
+                    
+                    data_points.append({
+                        'freq': freq,
+                        'x_theta': data[0], 'x_phi': data[1],
+                        'ku_theta': data[2], 'ku_phi': data[3],
+                        'k_theta': data[4], 'k_phi': data[5],
+                        'ka_theta': data[6], 'ka_phi': data[7]
+                    })
+                
+                return {
+                    'meta': meta,
+                    'data': data_points
+                }
+        except Exception as e:
+            self.log(f"读取二进制文件失败: {str(e)}", "ERROR")
+            return None
+
     def generate_default_calibration(self, freq_range: Tuple[float, float] = (8.0, 40.0), 
                                 step: float = 0.01) -> str:
         """
@@ -1340,18 +1575,8 @@ class CalibrationFileManager:
         """
         创建新校准文件
         
-        :param equipment_meta: 设备元数据 {
-                'operator': str,
-                'signal_gen': (model, sn),
-                'spec_analyzer': (model, sn),
-                'antenna': (model, sn),
-                'environment': (temp_c, humidity_pct)
-            }
-        :param freq_params: 频率参数 {
-                'start_ghz': float,
-                'stop_ghz': float,
-                'step_ghz': float
-            }
+        :param equipment_meta: 设备元数据
+        :param freq_params: 频率参数
         :param version_notes: 版本说明
         :return: 创建的校准文件路径
         """
@@ -1368,13 +1593,16 @@ class CalibrationFileManager:
         )
         
         self.active_file = os.path.join(self.base_dir, filename)
+        self.active_bin_file = self._generate_bin_filename(self.active_file)
         self.current_meta = {
             **equipment_meta,
             'freq_params': freq_params,
             'created': timestamp,
             'points': points,
-            'version_notes': version_notes
+            'version_notes': version_notes,
+            'file_format': 'csv+bin'  # 标记文件格式
         }
+        self._data_points = []  # 重置数据点
         
         # 写入文件头
         with self._file_lock, open(self.active_file, 'w', encoding='utf-8') as f:
@@ -1423,16 +1651,7 @@ class CalibrationFileManager:
         添加单频点数据
         
         :param freq_ghz: 当前频率(GHz)
-        :param data: 测量数据 {
-                'x_theta': float,
-                'x_phi': float,
-                'ku_theta': float,
-                'ku_phi': float,
-                'k_theta': float,
-                'k_phi': float,
-                'ka_theta': float,
-                'ka_phi': float
-            }
+        :param data: 测量数据
         :return: 是否成功添加
         """
         if not self.active_file:
@@ -1446,15 +1665,12 @@ class CalibrationFileManager:
             if not (-100 <= value <= 100):  # 假设合理范围是-100到100 dB
                 self.log(f"数据超出范围: {key}={value}", "WARNING")
         
-        # 验证频率步进
-        expected_points = self.current_meta['points']
-        current_point = int((freq_ghz - self.current_meta['freq_params']['start_ghz']) / 
-                          self.current_meta['freq_params']['step_ghz']) + 1
+        # 存储数据点用于BIN文件
+        self._data_points.append({
+            'freq': freq_ghz,
+            **data
+        })
         
-        if current_point > expected_points:
-            self.log(f"频率 {freq_ghz}GHz 超过停止频率", "WARNING")
-            return False
-
         # 格式化数据行
         data_row = (
             f"{freq_ghz:.3f},"
@@ -1472,18 +1688,14 @@ class CalibrationFileManager:
         with self._file_lock, open(self.active_file, 'a', encoding='utf-8') as f:
             f.write(data_row)
         
-        # 定期备份
-        if current_point % 100 == 0:  # 每10个点备份一次
-            self._backup_file()
-        
         return True
-
-    def finalize_calibration(self, notes: str = "") -> str:
+    
+    def finalize_calibration(self, notes: str = "") -> Tuple[str, str]:
         """
         完成校准并添加校验信息
         
         :param notes: 附加说明
-        :return: 归档后的文件路径
+        :return: (归档后的CSV文件路径, BIN文件路径)
         """
         if not self.active_file:
             raise RuntimeError("没有活动的校准文件")
@@ -1499,14 +1711,98 @@ class CalibrationFileManager:
         with open(self.active_file, 'a', encoding='utf-8') as f:
             f.write(f"!MD5: {file_hash}\n")
         
+        # 生成BIN文件
+        bin_path = self._write_bin_file(self.active_file)
+        
         self.log(f"校准完成: {os.path.basename(self.active_file)}", "SUCCESS")
         
         # 归档文件
-        archived_path = self._archive_file()
-        self.active_file = None
-        self.current_meta = {}
+        archived_csv = self._archive_file()  # 归档CSV
+        archived_bin = self._archive_file(bin_path) if bin_path else None  # 归档BIN
         
-        return archived_path
+        self.active_file = None
+        self.active_bin_file = None
+        self.current_meta = {}
+        self._data_points = []
+        
+        return archived_csv, archived_bin
+
+    
+    def load_calibration_file(self, filepath: str) -> Optional[Dict]:
+        """
+        加载校准文件(支持CSV和BIN格式)
+        
+        :param filepath: 文件路径
+        :return: 包含元数据和数据的字典，None表示失败
+        """
+        if not os.path.exists(filepath):
+            self.log(f"文件不存在: {filepath}", "ERROR")
+            return None
+        
+        # 根据扩展名选择加载方式
+        if filepath.lower().endswith('.bin'):
+            return self._read_bin_file(filepath)
+        else:
+            return self._load_csv_file(filepath)
+
+    def _load_csv_file(self, csv_path: str) -> Optional[Dict]:
+        """加载CSV格式校准文件"""
+        try:
+            with open(csv_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            # 解析元数据
+            meta = {
+                'file_format': 'csv',
+                'header': []
+            }
+            data_start = 0
+            for i, line in enumerate(lines):
+                if line.startswith('!'):
+                    meta['header'].append(line.strip())
+                    # 解析特定元数据
+                    if line.startswith('!Created:'):
+                        meta['created'] = line.split(':', 1)[1].strip()
+                    elif line.startswith('!Operator:'):
+                        meta['operator'] = line.split(':', 1)[1].strip()
+                    elif line.startswith('!  Points:'):
+                        meta['points'] = int(line.split(':', 1)[1].strip())
+                else:
+                    data_start = i
+                    break
+            
+            # 解析数据
+            data_points = []
+            for line in lines[data_start:]:
+                if line.startswith('!') or not line.strip():
+                    continue
+                
+                parts = line.strip().split(',')
+                if len(parts) != 9:
+                    continue
+                
+                try:
+                    data_points.append({
+                        'freq': float(parts[0]),
+                        'x_theta': float(parts[1]),
+                        'x_phi': float(parts[2]),
+                        'ku_theta': float(parts[3]),
+                        'ku_phi': float(parts[4]),
+                        'k_theta': float(parts[5]),
+                        'k_phi': float(parts[6]),
+                        'ka_theta': float(parts[7]),
+                        'ka_phi': float(parts[8])
+                    })
+                except ValueError:
+                    continue
+            
+            return {
+                'meta': meta,
+                'data': data_points
+            }
+        except Exception as e:
+            self.log(f"读取CSV文件失败: {str(e)}", "ERROR")
+            return None
 
     def _calculate_file_hash(self) -> str:
         """计算文件MD5校验值"""
@@ -1516,16 +1812,24 @@ class CalibrationFileManager:
                 hash_md5.update(chunk)
         return hash_md5.hexdigest()
 
-    def _archive_file(self) -> str:
-        """将文件移动到归档目录"""
+    def _archive_file(self, filepath: Optional[str] = None) -> str:
+        """将文件移动到归档目录
+        :param filepath: 要归档的文件路径，如果为None则使用self.active_file
+        :return: 归档后的文件路径
+        """
         archive_dir = os.path.join(self.base_dir, "archive")
         os.makedirs(archive_dir, exist_ok=True)
         
-        filename = os.path.basename(self.active_file)
+        src = filepath if filepath is not None else self.active_file
+        if src is None:
+            raise ValueError("没有指定要归档的文件")
+        
+        filename = os.path.basename(src)
         dst = os.path.join(archive_dir, filename)
         
-        shutil.move(self.active_file, dst)
+        shutil.move(src, dst)
         return dst
+
 
     def _backup_file(self) -> bool:
         """创建备份文件"""
@@ -1561,6 +1865,49 @@ class CalibrationFileManager:
             self.log(f"文件不存在: {filepath}", "ERROR")
             return False
         
+        # 根据文件扩展名选择验证方式
+        if filepath.lower().endswith('.bin'):
+            return self._validate_bin_file(filepath)
+        else:
+            return self._validate_csv_file(filepath)
+
+    def _validate_bin_file(self, filepath: str) -> bool:
+        """验证BIN格式校准文件"""
+        try:
+            with open(filepath, 'rb') as f:
+                # 验证头部
+                magic = f.read(4)
+                if magic != b'RNXC':
+                    self.log("无效的二进制文件格式", "WARNING")
+                    return False
+                
+                version = ord(f.read(1))
+                if version != 1:
+                    self.log(f"不支持的版本号: {version}", "WARNING")
+                    return False
+                
+                # 读取元数据长度
+                meta_len = int.from_bytes(f.read(4), 'little')
+                # 跳过元数据
+                f.seek(meta_len, 1)
+                
+                # 检查数据点数量
+                file_size = os.path.getsize(filepath)
+                header_size = 4 + 1 + 4 + meta_len  # 幻数+版本+长度+元数据
+                data_size = file_size - header_size
+                
+                if data_size % 36 != 0:  # 每个数据点36字节(4+32)
+                    self.log("数据大小不匹配", "WARNING")
+                    return False
+                
+                return True
+                
+        except Exception as e:
+            self.log(f"验证二进制文件失败: {str(e)}", "ERROR")
+            return False
+
+    def _validate_csv_file(self, filepath: str) -> bool:
+        """验证CSV格式校准文件"""
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
@@ -1599,8 +1946,71 @@ class CalibrationFileManager:
             return True
             
         except Exception as e:
-            self.log(f"验证失败: {str(e)}", "ERROR")
+            self.log(f"验证CSV文件失败: {str(e)}", "ERROR")
             return False
+        
+    def print_bin_file_contents(self, bin_path: str):
+        """
+        打印BIN文件内容用于验证数据正确性
+        
+        :param bin_path: BIN文件路径
+        """
+        if not os.path.exists(bin_path):
+            self.log(f"BIN文件不存在: {bin_path}", "ERROR")
+            return
+        
+        try:
+            with open(bin_path, 'rb') as f:
+                # 读取头部
+                magic = f.read(4)
+                version = ord(f.read(1))
+                meta_len = int.from_bytes(f.read(4), 'little')
+                meta_json = f.read(meta_len).decode('utf-8')
+                meta = json.loads(meta_json)
+                
+                self.log("\n=== BIN文件元数据 ===", "INFO")
+                self.log(f"幻数: {magic}", "INFO")
+                self.log(f"版本: {version}", "INFO")
+                self.log(f"元数据长度: {meta_len} 字节", "INFO")
+                self.log("元数据内容:", "INFO")
+                for key, value in meta.items():
+                    self.log(f"  {key}: {value}", "INFO")
+                
+                self.log("\n=== 数据点 ===", "INFO")
+                point_count = 0
+                while True:
+                    freq_bytes = f.read(4)
+                    if not freq_bytes:
+                        break
+                    
+                    freq = struct.unpack('f', freq_bytes)[0]
+                    data = struct.unpack('8f', f.read(32))
+                    
+                    # 打印前5个和后5个数据点，避免日志过多
+                    if point_count < 5 or point_count >= (meta.get('points', 0) - 5):
+                        self.log(
+                            f"点 {point_count}: 频率={freq:.3f}GHz, "
+                            f"Xθ={data[0]:.2f}, Xφ={data[1]:.2f}, "
+                            f"KUθ={data[2]:.2f}, KUφ={data[3]:.2f}, "
+                            f"Kθ={data[4]:.2f}, Kφ={data[5]:.2f}, "
+                            f"KAθ={data[6]:.2f}, KAφ={data[7]:.2f}", 
+                            "INFO"
+                        )
+                    
+                    point_count += 1
+                
+                self.log(f"\n=== 总结 ===", "INFO")
+                self.log(f"总数据点数: {point_count}", "INFO")
+                self.log(f"预期点数: {meta.get('points', '未知')}", "INFO")
+                if point_count == meta.get('points', -1):
+                    self.log("数据点数匹配", "SUCCESS")
+                else:
+                    self.log("数据点数不匹配", "ERROR")
+        
+        except Exception as e:
+            self.log(f"读取BIN文件失败: {str(e)}", "ERROR")
+
+
 
     def get_recent_calibrations(self, days: int = 7) -> List[Dict]:
         """
@@ -1615,7 +2025,7 @@ class CalibrationFileManager:
             }]
         """
         recent_files = []
-        cutoff_time = datetime.datetime.now() - datetime.timedelta(days=days)
+        cutoff_time = datetime.now() - datetime.timedelta(days=days)
         
         # 搜索主目录和归档目录
         search_dirs = [self.base_dir, os.path.join(self.base_dir, "archive")]
@@ -1629,7 +2039,7 @@ class CalibrationFileManager:
                     if file.startswith("RNX_Cal_DualPol_") and file.endswith(".csv"):
                         filepath = os.path.join(root, file)
                         try:
-                            mtime = datetime.datetime.fromtimestamp(os.path.getmtime(filepath))
+                            mtime = datetime.fromtimestamp(os.path.getmtime(filepath))
                             if mtime > cutoff_time:
                                 recent_files.append({
                                     'filename': file,
