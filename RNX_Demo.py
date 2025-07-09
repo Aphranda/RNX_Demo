@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QFont, QColor, QPainter, QPen
 from PyQt5.QtCore import Qt, QPointF, QThread, pyqtSignal, QMutex
 import sys, os, psutil
-import socket
+import socket, select
 import datetime
 import time
 
@@ -34,23 +34,11 @@ class StatusQueryThread(QThread):
                     reach = "NO Parameter"
                     home = self.query_status("READ:MOTion:HOME? ALL")
                     speed = self.query_status("READ:MOTion:SPEED? Z")
-                    if "timed out" in home.lower() or "error" in home.lower():
-                        home = self.query_status("READ:MOTion:HOME? ALL")
-                    if "timed out" in speed.lower() or "error" in speed.lower():
-                        speed = self.query_status("READ:MOTion:SPEED? Z")
-                    
                 else:
                     reach = self.query_status(f"READ:MOTion:FEED? {axis}")
                     home = self.query_status(f"READ:MOTion:HOME? {axis}")
                     speed = self.query_status(f"READ:MOTion:SPEED? {axis}")
 
-                    if "timed out" in reach.lower() or "error" in reach.lower():
-                        reach = self.query_status(f"READ:MOTion:FEED? {axis}")
-
-                    if "timed out" in home.lower() or "error" in home.lower():
-                        home = self.query_status(f"READ:MOTion:HOME? {axis}")
-                    if "timed out" in speed.lower() or "error" in speed.lower():
-                        speed = self.query_status(f"READ:MOTion:SPEED? {axis}")
 
                 status["motion"][axis] = {
                     "reach": reach,
@@ -60,18 +48,12 @@ class StatusQueryThread(QThread):
                 # 每次查一个信号源参数
                 if axis_idx == 0:
                     freq = self.query_status("READ:SOURce:FREQuency?")
-                    if "timed out" in freq.lower() or "error" in freq.lower():
-                        freq = self.query_status("READ:SOURce:FREQuency?")
                     status["src"]["freq"] = freq
                 elif axis_idx == 1:
                     power = self.query_status("READ:SOURce:POWer?")
-                    if "timed out" in power.lower() or "error" in power.lower():
-                        power = self.query_status("READ:SOURce:POWer?")
                     status["src"]["power"] = power
                 elif axis_idx == 2:
                     rf = self.query_status("READ:SOURce:OUTPut?")
-                    if "timed out" in rf.lower() or "error" in rf.lower():
-                        rf = self.query_status("READ:SOURce:OUTPut?")
                     status["src"]["rf"] = rf
             finally:
                 self.mutex.unlock()
@@ -84,24 +66,106 @@ class StatusQueryThread(QThread):
                 time.sleep(0.05)
 
 
-    def query_status(self, cmd):
-        try:
-            with socket.create_connection((self.ip, self.port), timeout=1) as sock:
+    def query_status(self, cmd, max_retries=3, base_timeout=1.0):
+        """
+        带超时重发机制的查询方法
+        参数:
+            cmd: 要发送的命令字符串
+            max_retries: 最大重试次数 (默认3次)
+            base_timeout: 基础超时时间(秒)，会随重试次数增加 (默认1秒)
+        返回:
+            成功: 返回设备响应字符串
+            失败: 返回错误信息字符串
+        """
+        retry_count = 0
+        last_exception = None
+        
+        while retry_count < max_retries:
+            sock = None
+            try:
+                # 动态计算当前超时时间 (指数退避算法)
+                current_timeout = min(base_timeout * (2 ** retry_count), 5.0)  # 最大不超过5秒
+                
+                # 建立连接并设置超时
+                sock = socket.create_connection((self.ip, self.port), timeout=current_timeout)
+                sock.settimeout(current_timeout)
+                
+                # 发送命令
                 sock.sendall((cmd + '\n').encode('utf-8'))
-                data = sock.recv(4096)
-                sock.close()
-                return data.decode('utf-8').strip()
-        except Exception as e:
-            return f"连接失败: {e}"
+                
+                # 接收数据（支持分片接收）
+                data = b''
+                start_time = time.time()
+                while True:
+                    try:
+                        # 检查是否超时
+                        if time.time() - start_time > current_timeout:
+                            raise socket.timeout(f"接收超时 ({current_timeout:.1f}s)")
+                        
+                        # 尝试读取数据
+                        chunk = sock.recv(4096)
+                        if not chunk:  # 连接关闭
+                            break
+                        
+                        data += chunk
+                        
+                        # 检查是否收到完整响应（以换行符判断）
+                        if b'\r\n' in data or b'\r' in data:
+                            break
+                            
+                    except socket.timeout:
+                        # 如果已经收到部分数据，则返回现有数据
+                        if data:
+                            break
+                        raise
+                    
+                if not data:
+                    raise ConnectionError("收到空响应")
+                
+                # 解码并清理响应
+                response = data.decode('utf-8').strip()
+                if not response:
+                    raise ValueError("响应为空字符串")
+                    
+                return response
+                
+            except (socket.timeout, ConnectionError) as e:
+                last_exception = e
+                retry_count += 1
+                time.sleep(0.2 * retry_count)  # 重试等待时间递增
+                
+                # 最后一次重试前打印警告
+                if retry_count == max_retries - 1:
+                    print(f"警告: 命令 '{cmd}' 第{retry_count}次重试...")
+                    
+            except Exception as e:
+                last_exception = e
+                break  # 非网络错误立即退出
+                
+            finally:
+                if sock:
+                    try:
+                        sock.close()
+                    except:
+                        pass
+        
+        # 所有重试失败后的处理
+        error_msg = f"命令 '{cmd}' 执行失败(重试{retry_count}次)"
+        if last_exception:
+            error_msg += f": {str(last_exception)}"
+        
+        return error_msg
+
 
     def stop(self):
         self._running = False
 
 class TcpClient:
-    """简单的TCP客户端，用于发送和接收指令"""
+    """带超时重发机制的TCP客户端"""
     def __init__(self):
         self.sock = None
         self.connected = False
+        self.last_error = None  # 记录最后一次错误
 
     def connect(self, ip, port, timeout=3):
         self.close()
@@ -110,45 +174,148 @@ class TcpClient:
         try:
             self.sock.connect((ip, int(port)))
             self.connected = True
+            self.last_error = None
             return True, "连接成功"
         except Exception as e:
+            self.last_error = str(e)
             self.connected = False
             self.sock = None
             return False, f"连接失败: {e}"
 
-    def send(self, msg):
+    def send(self, msg, max_retries=3, base_timeout=1.0):
+        """
+        带超时重发机制的发送方法
+        参数:
+            msg: 要发送的消息字符串
+            max_retries: 最大重试次数 (默认3次)
+            base_timeout: 基础超时时间(秒)，会随重试次数增加 (默认1秒)
+        返回:
+            (是否成功, 状态信息)
+        """
         if not self.connected or not self.sock:
             return False, "未连接"
-        try:
-            self.sock.sendall(msg.encode('utf-8'))
-            return True, "发送成功"
-        except Exception as e:
-            return False, f"发送失败: {e}"
 
-    def receive(self, bufsize=4096, timeout=3):
+        retry_count = 0
+        last_exception = None
+        
+        while retry_count < max_retries:
+            try:
+                # 动态计算当前超时时间 (指数退避算法)
+                current_timeout = min(base_timeout * (2 ** retry_count), 5.0)  # 最大不超过5秒
+                self.sock.settimeout(current_timeout)
+                
+                # 发送数据
+                self.sock.sendall(msg.encode('utf-8'))
+                self.last_error = None
+                return True, "发送成功"
+                
+            except (socket.timeout, ConnectionError) as e:
+                last_exception = e
+                retry_count += 1
+                time.sleep(0.2 * retry_count)  # 重试等待时间递增
+                
+                # 尝试重建连接
+                if isinstance(e, ConnectionError):
+                    try:
+                        ip, port = self.sock.getpeername()
+                        self.connect(ip, port, current_timeout)
+                    except:
+                        pass
+                
+            except Exception as e:
+                last_exception = e
+                break  # 非网络错误立即退出
+        
+        # 所有重试失败后的处理
+        self.last_error = str(last_exception) if last_exception else "未知错误"
+        error_msg = f"发送失败(重试{retry_count}次)"
+        if last_exception:
+            error_msg += f": {str(last_exception)}"
+        return False, error_msg
+
+    def receive(self, bufsize=4096, max_retries=3, base_timeout=1.0):
+        """
+        带超时重发机制的接收方法
+        参数:
+            bufsize: 每次接收的缓冲区大小 (默认4096)
+            max_retries: 最大重试次数 (默认3次)
+            base_timeout: 基础超时时间(秒)，会随重试次数增加 (默认1秒)
+        返回:
+            (是否成功, 接收到的数据或错误信息)
+        """
         if not self.connected or not self.sock:
             return False, "未连接"
-        self.sock.settimeout(timeout)
-        try:
-            chunks = []
-            while True:
-                try:
-                    data = self.sock.recv(bufsize)
-                    print(f"接收数据: {data}")
-                    if not data:
-                        break
-                    chunks.append(data)
-                    # 如果收到的数据已包含换行或结尾符，认为一条指令结束
-                    if b'\r\n' in data or b'\r' in data:
-                        break
-                except socket.timeout:
-                    break
-            if not chunks:
-                return False, "接收超时或无数据"
-            result = b''.join(chunks).decode('utf-8', errors='ignore').strip()
-            return True, result
-        except Exception as e:
-            return False, f"接收失败: {e}"
+
+        retry_count = 0
+        last_exception = None
+        
+        while retry_count < max_retries:
+            try:
+                # 动态计算当前超时时间
+                current_timeout = min(base_timeout * (2 ** retry_count), 5.0)
+                self.sock.settimeout(current_timeout)
+                
+                chunks = []
+                start_time = time.time()
+                remaining_time = current_timeout
+                
+                while True:
+                    try:
+                        # 使用select检查可读性
+                        ready = select.select([self.sock], [], [], min(0.1, remaining_time))
+                        if not ready[0]:  # 超时
+                            raise socket.timeout(f"接收超时 ({remaining_time:.1f}s)")
+                        
+                        data = self.sock.recv(bufsize)
+                        if not data:  # 连接关闭
+                            break
+                            
+                        chunks.append(data)
+                        
+                        # 检查是否收到完整消息（以换行符判断）
+                        if b'\r\n' in data or b'\r' in data:
+                            break
+                            
+                        # 更新剩余时间
+                        remaining_time = current_timeout - (time.time() - start_time)
+                        if remaining_time <= 0:
+                            raise socket.timeout("总接收超时")
+                            
+                    except socket.timeout:
+                        if chunks:  # 已有部分数据则返回
+                            break
+                        raise
+                
+                if not chunks:
+                    raise ValueError("收到空响应")
+                
+                result = b''.join(chunks).decode('utf-8', errors='ignore').strip()
+                self.last_error = None
+                return True, result
+                
+            except (socket.timeout, ConnectionError) as e:
+                last_exception = e
+                retry_count += 1
+                time.sleep(0.2 * retry_count)
+                
+                # 尝试重建连接
+                if isinstance(e, ConnectionError):
+                    try:
+                        ip, port = self.sock.getpeername()
+                        self.connect(ip, port, current_timeout)
+                    except:
+                        pass
+                
+            except Exception as e:
+                last_exception = e
+                break  # 非网络错误立即退出
+        
+        # 所有重试失败后的处理
+        self.last_error = str(last_exception) if last_exception else "未知错误"
+        error_msg = f"接收失败(重试{retry_count}次)"
+        if last_exception:
+            error_msg += f": {str(last_exception)}"
+        return False, error_msg
 
     def close(self):
         if self.sock:
@@ -158,6 +325,8 @@ class TcpClient:
                 pass
         self.sock = None
         self.connected = False
+        self.last_error = None
+
 
 class SimpleLinkDiagram(QLabel):
     def __init__(self, parent=None):
@@ -792,7 +961,7 @@ class MainWindow(QMainWindow):
                 self.show_status(msg)
                 return
             success, resp = self.tcp_client.receive()
-            print(f"Received: {resp}")  # 调试输出
+            
             if success:
                 self.log(resp, "RECV")
                 self.show_status("指令已发送。")
@@ -913,10 +1082,8 @@ def count_current_process_instances():
             # 检查进程命令行是否匹配当前脚本路径
             cmdline = proc.info['cmdline']
             if cmdline and os.path.abspath(cmdline[0]) == current_script_path:
-                print(f"检测到进程: {proc.info['pid']} - {cmdline[0]}")
                 if proc.info['pid'] != current_pid:  # 排除自己
                     count += 1
-                    print(count, "个相同脚本实例在运行")
         except (psutil.NoSuchProcess, psutil.AccessDenied, IndexError):
             continue
     return count
@@ -924,7 +1091,6 @@ def count_current_process_instances():
 if __name__ == "__main__":
 
     if count_current_process_instances() > 2:
-        print("已有相同脚本在运行，禁止重复启动！")
         app = QApplication(sys.argv)  # 先创建QApplication
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Warning)
