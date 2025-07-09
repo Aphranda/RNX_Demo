@@ -4,6 +4,9 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QFont, QColor, QPainter, QPen
 from PyQt5.QtCore import Qt, QPointF, QThread, pyqtSignal, QMutex
+from PyQt5.QtGui import QRegExpValidator
+from PyQt5.QtCore import QRegExp
+
 import sys, os, psutil
 import socket, select
 import datetime
@@ -41,7 +44,7 @@ class StatusQueryThread(QThread):
                 # 每次只查一个轴
                 axis= axes[axis_idx]
                 if axis == "Z":
-                    reach = "NO Parameter"
+                    reach = "NO Pa"
                     home = self.query_status("READ:MOTion:HOME? ALL")
                     speed = self.query_status("READ:MOTion:SPEED? Z")
                 else:
@@ -520,35 +523,44 @@ class StatusPanel(QWidget):
         self.src_grid = QGridLayout()
         self.src_grid.setSpacing(6)
         src_layout.addLayout(self.src_grid)
-        self.src_grid.addWidget(QLabel("输出频率:"), 0, 0)
+
+        self.src_grid.addWidget(QLabel("信号频率:"), 0, 0)
         self.src_freq = QLabel("-")
         self.src_freq.setProperty("statusValue", True)
         self.src_grid.addWidget(self.src_freq, 0, 1)
-        self.src_grid.addWidget(QLabel("输出功率:"), 1, 0)
+
+        self.src_grid.addWidget(QLabel("信号功率:"), 1, 0)
+        self.src_raw_power = QLabel("-")
+        self.src_raw_power.setProperty("statusValue", True)
+        self.src_grid.addWidget(self.src_raw_power, 1, 1)
+
+        self.src_grid.addWidget(QLabel("馈源功率:"), 2, 0)
         self.src_power = QLabel("-")
         self.src_power.setProperty("statusValue", True)
-        self.src_grid.addWidget(self.src_power, 1, 1)
-        self.src_grid.addWidget(QLabel("RF输出:"), 2, 0)
+        self.src_grid.addWidget(self.src_power, 2, 1)
+
+        self.src_grid.addWidget(QLabel("RF输出:"), 3, 0)
         self.src_rf = QLabel("-")
         self.src_rf.setProperty("statusValue", True)
-        self.src_grid.addWidget(self.src_rf, 2, 1)
+        self.src_grid.addWidget(self.src_rf, 3, 1)
 
 
         # 新增：校准文件状态
-        self.src_grid.addWidget(QLabel("校准文件:"), 3, 0)
+        self.src_grid.addWidget(QLabel("校准文件:"), 4, 0)
         self.cal_file_status = QLabel("未加载")
         self.cal_file_status.setProperty("statusValue", True)
-        self.src_grid.addWidget(self.cal_file_status, 3, 1)
+        self.src_grid.addWidget(self.cal_file_status, 4, 1)
         
         # 新增：校准文件路径输入和加载按钮
-        self.src_grid.addWidget(QLabel("校准路径:"), 4, 0)
+        self.src_grid.addWidget(QLabel("校准路径:"), 5, 0)
         self.cal_file_input = QLineEdit()
+
         self.cal_file_input.setPlaceholderText("选择校准文件...")
-        self.src_grid.addWidget(self.cal_file_input, 4, 1)
+        self.src_grid.addWidget(self.cal_file_input, 5, 1)
         
         self.load_cal_btn = QPushButton("加载")
         self.load_cal_btn.setFixedWidth(80)  # 设置固定宽度
-        self.src_grid.addWidget(self.load_cal_btn, 4, 2)
+        self.src_grid.addWidget(self.load_cal_btn, 5, 2)
 
         src_layout.addStretch()
 
@@ -768,37 +780,56 @@ class MainWindow(QMainWindow):
         src_group = QGroupBox("信号源控制")
         src_layout = QGridLayout()
         src_group.setLayout(src_layout)
-        src_layout.addWidget(QLabel("频率:"), 0, 0)
+
+        src_layout.addWidget(QLabel("信号频率:"), 0, 0)
         self.freq_input = QLineEdit()
         self.freq_input.setPlaceholderText("如 8GHz")
-        src_layout.addWidget(self.freq_input, 0, 1)
+        src_layout.addWidget(self.freq_input, 0, 1,1,2)
         self.freq_btn = QPushButton("设置频率")
         self.freq_btn.clicked.connect(self.send_freq_cmd)
-        src_layout.addWidget(self.freq_btn, 0, 2)
+        src_layout.addWidget(self.freq_btn, 0, 3)
         self.freq_query_btn = QPushButton("查询频率")
         self.freq_query_btn.clicked.connect(self.query_freq_cmd)
-        src_layout.addWidget(self.freq_query_btn, 0, 3)
-        src_layout.addWidget(QLabel("功率:"), 1, 0)
+        src_layout.addWidget(self.freq_query_btn, 0, 4)
+
+        src_layout.addWidget(QLabel("馈源功率:"), 1, 0)
         self.power_input = QLineEdit()
         self.power_input.setPlaceholderText("如 -40dBm")
         src_layout.addWidget(self.power_input, 1, 1)
+
+        self.raw_power_input = QLineEdit()
+        self.raw_power_input.setPlaceholderText("信号源实际输出")
+        src_layout.addWidget(self.raw_power_input,1,2)
+
         self.power_btn = QPushButton("设置功率")
         self.power_btn.clicked.connect(self.send_power_cmd)
-        src_layout.addWidget(self.power_btn, 1, 2)
+        src_layout.addWidget(self.power_btn, 1, 3)
         self.power_query_btn = QPushButton("查询功率")
         self.power_query_btn.clicked.connect(self.query_power_cmd)
-        src_layout.addWidget(self.power_query_btn, 1, 3)
+        src_layout.addWidget(self.power_query_btn, 1, 4)
+
         src_layout.addWidget(QLabel("RF输出:"), 2, 0)
         self.output_combo = QComboBox()
         self.output_combo.addItems(["ON", "OFF"])
-        src_layout.addWidget(self.output_combo, 2, 1)
+        src_layout.addWidget(self.output_combo, 2, 1,0,2)
         self.output_btn = QPushButton("设置输出")
         self.output_btn.clicked.connect(self.send_output_cmd)
-        src_layout.addWidget(self.output_btn, 2, 2)
+        src_layout.addWidget(self.output_btn, 2, 3)
         self.output_query_btn = QPushButton("查询输出")
         self.output_query_btn.clicked.connect(self.query_output_cmd)
-        src_layout.addWidget(self.output_query_btn, 2, 3)
+        src_layout.addWidget(self.output_query_btn, 2, 4)
+
         right_panel.addWidget(src_group)
+
+        # 连接信号槽（使用textChanged而不是textEdited以获得实时响应）
+        self.power_input.textChanged.connect(self.on_power_input_changed)
+        self.raw_power_input.textChanged.connect(self.on_raw_power_input_changed)
+
+        # 添加输入验证器
+        self.power_validator = QRegExpValidator(QRegExp(r"^-?\d+\.?\d*\s*(dBm)?$"), self.power_input)
+        self.raw_power_validator = QRegExpValidator(QRegExp(r"^-?\d+\.?\d*\s*(dBm)?$"), self.raw_power_input)
+        self.power_input.setValidator(self.power_validator)
+        self.raw_power_input.setValidator(self.raw_power_validator)
 
         # 运动控制
         motion_group = QGroupBox("运动控制")
@@ -875,6 +906,7 @@ class MainWindow(QMainWindow):
             "HF_PORT4,RF_COM": "FEED_KA_PHI"
         }
         return link_mapping.get(response.strip(), "FEED_X_THETA")  # 默认返回X_THETA
+    
 
 
     # --- ETH连接 ---
@@ -917,6 +949,119 @@ class MainWindow(QMainWindow):
         else:
             self.show_status("未连接到设备。")
             self.log("未连接到设备。", "WARNING")
+
+    def is_valid_frequency(self, freq_str):
+        """验证频率值是否有效"""
+        if not freq_str or freq_str == "-":
+            return False
+        try:
+            float(freq_str.replace("GHz", "").strip())
+            return True
+        except ValueError:
+            return False
+
+    def is_valid_power(self, text):
+        """验证功率输入是否有效"""
+        if not text.strip():
+            return False
+        try:
+            float(text.replace("dBm", "").strip())
+            return True
+        except ValueError:
+            return False
+
+    def should_process_input(self, text):
+        """判断是否应该处理输入"""
+        text = text.strip()
+        
+        # 条件1: 长度不超过2时不处理
+        if len(text) <= 2:
+            return False
+        
+        # 条件2: 如果最后输入的是符号(+/-)不处理
+        if text[-1] in ('+', '-'):
+            return False
+        
+        # 条件3: 检查是否为有效数字格式
+        try:
+            # 临时移除单位检查纯数字有效性
+            num_part = text.replace("dBm", "").strip()
+            if not num_part:  # 空字符串
+                return False
+            float(num_part)
+            return True
+        except ValueError:
+            return False
+
+    def on_power_input_changed(self, text):
+        """补偿后功率输入框变化时的处理"""
+        if not self.is_valid_power(text):
+            return
+        
+        if not self.should_process_input(text):
+            return
+        
+        # 防止递归触发
+        if self.raw_power_input.signalsBlocked():
+            return
+        
+        try:
+            power_dbm = float(text.replace("dBm", "").strip())
+            
+            # 获取当前频率
+            freq_str = self.status_cache["src"].get("freq", "0")
+            if not self.is_valid_frequency(freq_str):
+                self.show_status("当前频率无效，无法计算补偿", timeout=3000)
+                return
+                
+            freq_ghz = float(freq_str.replace("GHz", "").strip()) if "GHz" in freq_str else float(freq_str)/1e9
+            
+            # 计算补偿值
+            compensation = self.get_compensation_value(freq_ghz) if self.compensation_enabled else 0.0
+            raw_power = power_dbm - compensation
+            
+            # 更新原始功率输入框（不触发信号）
+            self.raw_power_input.blockSignals(True)
+            self.raw_power_input.setText(f"{raw_power:.2f} dBm")
+            self.raw_power_input.blockSignals(False)
+            
+        except ValueError as e:
+            self.log(f"功率转换错误: {str(e)}", "WARNING")
+
+    def on_raw_power_input_changed(self, text):
+        """原始功率输入框变化时的处理"""
+        if not self.is_valid_power(text):
+            return
+    
+        if not self.should_process_input(text):
+            return
+        
+        # 防止递归触发
+        if self.power_input.signalsBlocked():
+            return
+        
+        try:
+            raw_power = float(text.replace("dBm", "").strip())
+            
+            # 获取当前频率
+            freq_str = self.status_cache["src"].get("freq", "0")
+            if not self.is_valid_frequency(freq_str):
+                self.show_status("当前频率无效，无法计算补偿", timeout=3000)
+                return
+                
+            freq_ghz = float(freq_str.replace("GHz", "").strip()) if "GHz" in freq_str else float(freq_str)/1e9
+            
+            # 计算补偿值
+            compensation = self.get_compensation_value(freq_ghz) if self.compensation_enabled else 0.0
+            power_dbm = raw_power + compensation
+            
+            # 更新补偿后功率输入框（不触发信号）
+            self.power_input.blockSignals(True)
+            self.power_input.setText(f"{power_dbm:.2f} dBm")
+            self.power_input.blockSignals(False)
+            
+        except ValueError as e:
+            self.log(f"原始功率转换错误: {str(e)}", "WARNING")
 
 
 
@@ -967,11 +1112,12 @@ class MainWindow(QMainWindow):
         """加载校准文件"""
         from PyQt5.QtWidgets import QFileDialog
 
-        # cal = CalibrationFileManager(log_callback=self.log)
-        # cal.generate_default_calibration((8,40),0.01)
+
         # 确保cal_manager已初始化
         if self.cal_manager is None:
             self.cal_manager = CalibrationFileManager(log_callback=self.log)
+
+           # self.cal_manager.generate_default_calibration((8, 40), 0.01)  # 生成默认校准数据
         
         # 获取最近校准文件目录
         cal_dir = "calibrations"  # 默认目录
@@ -1386,8 +1532,8 @@ class MainWindow(QMainWindow):
             axis_status = self.status_cache["motion"][axis]
             # 达位
             if axis == "Z":
-                self.status_panel.motion_reach[axis].setText("NO Param")
-                set_status_color(self.status_panel.motion_reach[axis], "NO Param")
+                self.status_panel.motion_reach[axis].setText("NO Pa")
+                set_status_color(self.status_panel.motion_reach[axis], "NO Pa")
             else:
                 txt = axis_status.get("reach", "-")
                 self.status_panel.motion_reach[axis].setText(txt)
@@ -1441,9 +1587,10 @@ class MainWindow(QMainWindow):
         freq_disp = format_freq(src.get("freq", "-"))
         self.status_panel.src_freq.setText(freq_disp)
         set_status_color(self.status_panel.src_freq, freq_disp)
-        # power_disp = format_power(src.get("power", "-"))
-        # self.status_panel.src_power.setText(power_disp)
-        # set_status_color(self.status_panel.src_power, power_disp)
+
+        power_raw_disp = format_power(src.get("power", "-"))
+        self.status_panel.src_raw_power.setText(power_raw_disp)
+        set_status_color(self.status_panel.src_raw_power, power_raw_disp)
 
         # 功率显示加入补偿
         power_str = src.get("power", "-")
@@ -1460,11 +1607,11 @@ class MainWindow(QMainWindow):
                 compensation = self.get_compensation_value(freq_ghz)
                 actual_power = measured_power + compensation
                 
-                power_disp = f"{actual_power:.2f} dBm (补偿: {compensation:.2f} dB)"
+                power_disp = f"{actual_power:.2f} dBm"
             except ValueError:
-                power_disp = power_str
+                power_disp = format_power(power_str)
         else:
-            power_disp = power_str
+            power_disp = format_power(power_str)
         
         self.status_panel.src_power.setText(power_disp)
         set_status_color(self.status_panel.src_power, power_disp)
