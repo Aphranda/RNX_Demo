@@ -9,6 +9,13 @@ import socket, select
 import datetime
 import time
 import atexit # 确保程序退出时清理资源
+import os
+import hashlib
+import shutil
+import datetime
+import threading
+from typing import Dict, List, Optional, Tuple, Union
+from datetime import datetime, timezone
 
 
 class StatusQueryThread(QThread):
@@ -441,7 +448,7 @@ class LogWidget(QTextEdit):
         self.setReadOnly(True)
 
     def log(self, message, level="INFO"):
-        now = datetime.datetime.now().strftime("%H:%M:%S")
+        now = datetime.now().strftime("%H:%M:%S")
         color = {
             "INFO": "#222222",
             "SUCCESS": "#228B22",
@@ -469,8 +476,6 @@ class StatusPanel(QWidget):
         self.motion_label = QLabel("")
         self.motion_label.setProperty("panelTitle", True)
         motion_layout.addWidget(self.motion_label)
-
-
 
         self.motion_grid = QGridLayout()
         self.motion_grid.setSpacing(6)
@@ -526,6 +531,23 @@ class StatusPanel(QWidget):
         self.src_rf = QLabel("-")
         self.src_rf.setProperty("statusValue", True)
         self.src_grid.addWidget(self.src_rf, 2, 1)
+
+        # 新增：校准文件状态
+        self.src_grid.addWidget(QLabel("校准文件:"), 3, 0)
+        self.cal_file_status = QLabel("未加载")
+        self.cal_file_status.setProperty("statusValue", True)
+        self.src_grid.addWidget(self.cal_file_status, 3, 1)
+        
+        # 新增：校准文件路径输入和加载按钮
+        self.src_grid.addWidget(QLabel("校准路径:"), 4, 0)
+        self.cal_file_input = QLineEdit()
+        self.cal_file_input.setPlaceholderText("选择校准文件...")
+        self.src_grid.addWidget(self.cal_file_input, 4, 1)
+        
+        self.load_cal_btn = QPushButton("加载")
+        self.load_cal_btn.setFixedWidth(80)  # 设置固定宽度
+        self.src_grid.addWidget(self.load_cal_btn, 4, 2)
+
         src_layout.addStretch()
 
         motion_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
@@ -732,6 +754,9 @@ class MainWindow(QMainWindow):
         link_ctrl_layout.addWidget(self.link_query_btn)
         right_panel.addWidget(link_ctrl_group)
 
+        # 新增：校准文件加载
+        self.status_panel.load_cal_btn.clicked.connect(self.load_calibration_file)
+
         # 信号源控制
         src_group = QGroupBox("信号源控制")
         src_layout = QGridLayout()
@@ -885,6 +910,51 @@ class MainWindow(QMainWindow):
         else:
             self.show_status("未连接到设备。")
             self.log("未连接到设备。", "WARNING")
+    
+    def load_calibration_file(self):
+        """加载校准文件"""
+        from PyQt5.QtWidgets import QFileDialog
+
+        cal = CalibrationFileManager(log_callback=self.log)
+    
+        # 获取最近校准文件目录
+        cal_dir = "calibrations"  # 默认目录
+        if hasattr(self, 'cal_manager'):
+            cal_dir = self.cal_manager.base_dir
+        
+        # 打开文件选择对话框
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, 
+            "选择校准文件", 
+            cal_dir, 
+            "校准文件 (*.csv);;所有文件 (*)"
+        )
+        
+        if file_path:
+            self.status_panel.cal_file_input.setText(file_path)
+            self.log(f"已选择校准文件: {file_path}", "INFO")
+            
+            # 验证文件
+            if not hasattr(self, 'cal_manager'):
+                self.cal_manager = CalibrationFileManager(log_callback=self.log)
+                
+            if self.cal_manager.validate_calibration_file(file_path):
+                self.status_panel.cal_file_status.setText("已加载")
+                self.status_panel.cal_file_status.setStyleSheet(
+                    "background:#b6f5c6; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
+                )
+                self.show_status(f"校准文件有效: {os.path.basename(file_path)}")
+                self.log("校准文件验证通过", "SUCCESS")
+                
+                # 这里可以添加实际加载校准数据的逻辑
+                # 例如: self.load_calibration_data(file_path)
+            else:
+                self.status_panel.cal_file_status.setText("无效")
+                self.status_panel.cal_file_status.setStyleSheet(
+                    "background:#ffcdd2; color:#d32f2f; border:2px solid #0078d7; border-radius:8px;"
+                )
+                self.show_status("校准文件无效")
+                self.log("校准文件验证失败", "ERROR")
 
     # --- 指令组合与发送 ---
     def send_link_cmd(self):
@@ -1170,64 +1240,152 @@ class MainWindow(QMainWindow):
         self.status_panel.src_label.setText("信号源状态更新中...")
         self.status_panel.src_label.setStyleSheet("color: #228B22;")
 
+
+
 class CalibrationFileManager:
     """
     校准文件全生命周期管理类
-    功能涵盖：创建、写入、验证、版本控制、自动归档
+    功能涵盖：创建、写入、验证、版本控制、自动归档、数据完整性检查
     """
-    def __init__(self, base_dir="calibrations"):
-        import os
-        from datetime import datetime
-        self.base_dir = base_dir
-        self.active_file = None
-        self.current_meta = {}
-        os.makedirs(base_dir, exist_ok=True)
+    
+    def __init__(self, base_dir: str = "calibrations", log_callback: Optional[callable] = None):
+        """
+        初始化校准文件管理器
+        
+        :param base_dir: 校准文件存储根目录
+        :param log_callback: 日志回调函数，格式为 func(msg: str, level: str)
+        """
+        self.base_dir = os.path.abspath(base_dir)
+        self.active_file: Optional[str] = None
+        self.current_meta: Dict = {}
+        self._file_lock = threading.Lock()
+        
+        os.makedirs(self.base_dir, exist_ok=True)
+        
+        # 初始化日志系统
+        self.log = log_callback if callable(log_callback) else self._default_logger
+        
+        # 创建必要的子目录
+        for subdir in ["archive", "backup"]:
+            os.makedirs(os.path.join(self.base_dir, subdir), exist_ok=True)
 
-        # 初始化日志（集成到主系统日志）
-        self.log = lambda msg, level: print(f"[CAL {level}] {msg}")  # 替换为实际日志接口
+    def _default_logger(self, msg: str, level: str = "INFO"):
+        """默认日志记录器"""
+        print(f"[CAL {level}] {msg}")
 
-    def create_new_calibration(self, equipment_meta, freq_params):
+    def generate_default_calibration(self, freq_range: Tuple[float, float] = (8.0, 40.0), 
+                                step: float = 0.01) -> str:
+        """
+        生成默认校准文件（所有参数为0），确保包含边界频率
+        
+        :param freq_range: 频率范围(GHz) (start, stop)
+        :param step: 频率步进(GHz)
+        :return: 生成的校准文件路径
+        """
+        # 默认设备元数据
+        default_meta = {
+            'operator': 'SYSTEM',
+            'signal_gen': ('DEFAULT_SG', 'SN00000'),
+            'spec_analyzer': ('DEFAULT_SA', 'SN00000'),
+            'antenna': ('DEFAULT_ANT', 'SN00000'),
+            'environment': (25.0, 50.0)  # 25°C, 50%RH
+        }
+        
+        # 确保stop频率不小于start频率
+        start_ghz = min(freq_range)
+        stop_ghz = max(freq_range)
+        
+        # 频率参数
+        freq_params = {
+            'start_ghz': start_ghz,
+            'stop_ghz': stop_ghz,
+            'step_ghz': step
+        }
+        
+        # 创建新校准文件
+        filepath = self.create_new_calibration(
+            equipment_meta=default_meta,
+            freq_params=freq_params,
+            version_notes="系统生成的默认校准文件（所有参数为0）"
+        )
+        
+        # 计算精确的点数，避免浮点误差
+        num_points = int(round((stop_ghz - start_ghz) / step)) + 1
+        
+        # 填充0值数据，确保包含边界频率
+        for i in range(num_points):
+            freq = start_ghz + i * step
+            # 处理浮点精度问题，确保最后一个点是stop_ghz
+            if i == num_points - 1:
+                freq = stop_ghz
+                
+            zero_data = {
+                'x_theta': 0.0, 'x_phi': 0.0,
+                'ku_theta': 0.0, 'ku_phi': 0.0,
+                'k_theta': 0.0, 'k_phi': 0.0,
+                'ka_theta': 0.0, 'ka_phi': 0.0
+            }
+            self.add_data_point(round(freq, 6), zero_data)  # 保留6位小数避免浮点误差
+        
+        # 完成校准
+        archived_path = self.finalize_calibration("系统自动生成的默认校准文件")
+        
+        return archived_path
+
+
+    def create_new_calibration(self, 
+                             equipment_meta: Dict, 
+                             freq_params: Dict, 
+                             version_notes: Optional[str] = None) -> str:
         """
         创建新校准文件
-        :param equipment_meta: dict {
-            'operator': str,
-            'signal_gen': (model, sn),
-            'spec_analyzer': (model, sn),
-            'antenna': (model, sn),
-            'environment': (temp_c, humidity_pct)
-        }
-        :param freq_params: dict {
-            'start_ghz': float,
-            'stop_ghz': float,
-            'step_ghz': float
-        }
+        
+        :param equipment_meta: 设备元数据 {
+                'operator': str,
+                'signal_gen': (model, sn),
+                'spec_analyzer': (model, sn),
+                'antenna': (model, sn),
+                'environment': (temp_c, humidity_pct)
+            }
+        :param freq_params: 频率参数 {
+                'start_ghz': float,
+                'stop_ghz': float,
+                'step_ghz': float
+            }
+        :param version_notes: 版本说明
+        :return: 创建的校准文件路径
         """
-        from datetime import datetime
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%SZ")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%SZ")
+        
+        # 计算总点数
+        points = int((freq_params['stop_ghz'] - freq_params['start_ghz']) / freq_params['step_ghz']) + 1
         
         # 生成文件名
+        filename = (
+            f"RNX_Cal_DualPol_"
+            f"{freq_params['start_ghz']}to{freq_params['stop_ghz']}GHz_"
+            f"step{freq_params['step_ghz']}_{timestamp}.csv"
+        )
+        
+        self.active_file = os.path.join(self.base_dir, filename)
         self.current_meta = {
             **equipment_meta,
             'freq_params': freq_params,
             'created': timestamp,
-            'points': int((freq_params['stop_ghz'] - freq_params['start_ghz']) / freq_params['step_ghz']) + 1
+            'points': points,
+            'version_notes': version_notes
         }
         
-        filename = (f"RNX_Cal_DualPol_"
-                   f"{freq_params['start_ghz']}to{freq_params['stop_ghz']}GHz_"
-                   f"step{freq_params['step_ghz']}_{timestamp}.csv")
-        
-        self.active_file = os.path.join(self.base_dir, filename)
-        
         # 写入文件头
-        header = self._generate_header()
-        with open(self.active_file, 'w', encoding='utf-8') as f:
-            f.write(header)
+        with self._file_lock, open(self.active_file, 'w', encoding='utf-8') as f:
+            f.write(self._generate_header())
+            if version_notes:
+                f.write(f"!VersionNotes: {version_notes}\n")
         
-        self.log(f"Created new calibration: {filename}", "INFO")
+        self.log(f"创建新校准文件: {filename}", "INFO")
         return self.active_file
 
-    def _generate_header(self):
+    def _generate_header(self) -> str:
         """生成标准文件头"""
         meta = self.current_meta
         freq = meta['freq_params']
@@ -1260,31 +1418,41 @@ class CalibrationFileManager:
         ]
         return '\n'.join(header_lines) + '\n'
 
-    def add_data_point(self, freq_ghz, data):
+    def add_data_point(self, freq_ghz: float, data: Dict) -> bool:
         """
         添加单频点数据
+        
         :param freq_ghz: 当前频率(GHz)
-        :param data: dict {
-            'x_theta': float,
-            'x_phi': float,
-            'ku_theta': float,
-            'ku_phi': float,
-            'k_theta': float,
-            'k_phi': float,
-            'ka_theta': float,
-            'ka_phi': float
-        }
+        :param data: 测量数据 {
+                'x_theta': float,
+                'x_phi': float,
+                'ku_theta': float,
+                'ku_phi': float,
+                'k_theta': float,
+                'k_phi': float,
+                'ka_theta': float,
+                'ka_phi': float
+            }
+        :return: 是否成功添加
         """
         if not self.active_file:
-            raise RuntimeError("No active calibration file")
+            raise RuntimeError("没有活动的校准文件")
+        
+        # 验证数据范围
+        for key, value in data.items():
+            if not isinstance(value, (int, float)):
+                self.log(f"无效数据格式: {key}={value}", "ERROR")
+                return False
+            if not (-100 <= value <= 100):  # 假设合理范围是-100到100 dB
+                self.log(f"数据超出范围: {key}={value}", "WARNING")
         
         # 验证频率步进
         expected_points = self.current_meta['points']
         current_point = int((freq_ghz - self.current_meta['freq_params']['start_ghz']) / 
-                        self.current_meta['freq_params']['step_ghz']) + 1
+                          self.current_meta['freq_params']['step_ghz']) + 1
         
         if current_point > expected_points:
-            self.log(f"Frequency {freq_ghz}GHz exceeds stop frequency", "WARNING")
+            self.log(f"频率 {freq_ghz}GHz 超过停止频率", "WARNING")
             return False
 
         # 格式化数据行
@@ -1300,19 +1468,29 @@ class CalibrationFileManager:
             f"{data.get('ka_phi', -99.99):.2f}\n"
         )
         
-        with open(self.active_file, 'a', encoding='utf-8') as f:
+        # 写入数据（线程安全）
+        with self._file_lock, open(self.active_file, 'a', encoding='utf-8') as f:
             f.write(data_row)
+        
+        # 定期备份
+        if current_point % 100 == 0:  # 每10个点备份一次
+            self._backup_file()
         
         return True
 
-    def finalize_calibration(self, notes=""):
-        """完成校准并添加校验信息"""
+    def finalize_calibration(self, notes: str = "") -> str:
+        """
+        完成校准并添加校验信息
+        
+        :param notes: 附加说明
+        :return: 归档后的文件路径
+        """
         if not self.active_file:
-            raise RuntimeError("No active calibration file")
+            raise RuntimeError("没有活动的校准文件")
         
         # 添加结束标记
-        with open(self.active_file, 'a', encoding='utf-8') as f:
-            f.write(f"!EndOfData: {datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')}\n")
+        with self._file_lock, open(self.active_file, 'a', encoding='utf-8') as f:
+            f.write(f"!EndOfData: {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\n")
             if notes:
                 f.write(f"!Notes: {notes}\n")
         
@@ -1321,38 +1499,169 @@ class CalibrationFileManager:
         with open(self.active_file, 'a', encoding='utf-8') as f:
             f.write(f"!MD5: {file_hash}\n")
         
-        self.log(f"Calibration finalized: {os.path.basename(self.active_file)}", "SUCCESS")
+        self.log(f"校准完成: {os.path.basename(self.active_file)}", "SUCCESS")
+        
+        # 归档文件
         archived_path = self._archive_file()
         self.active_file = None
+        self.current_meta = {}
+        
         return archived_path
 
-    def _calculate_file_hash(self):
-        """计算文件校验值"""
-        import hashlib
-        with open(self.active_file, 'rb') as f:
-            return hashlib.md5(f.read()).hexdigest()
+    def _calculate_file_hash(self) -> str:
+        """计算文件MD5校验值"""
+        hash_md5 = hashlib.md5()
+        with open(self.active_file, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_md5.update(chunk)
+        return hash_md5.hexdigest()
 
-    def _archive_file(self):
+    def _archive_file(self) -> str:
         """将文件移动到归档目录"""
         archive_dir = os.path.join(self.base_dir, "archive")
         os.makedirs(archive_dir, exist_ok=True)
         
-        src = self.active_file
-        dst = os.path.join(archive_dir, os.path.basename(src))
+        filename = os.path.basename(self.active_file)
+        dst = os.path.join(archive_dir, filename)
         
-        import shutil
-        shutil.move(src, dst)
+        shutil.move(self.active_file, dst)
         return dst
 
-    def validate_calibration_file(self, filepath):
-        """验证现有校准文件完整性"""
-        # 实现校验逻辑...
-        pass
+    def _backup_file(self) -> bool:
+        """创建备份文件"""
+        if not self.active_file:
+            return False
+            
+        backup_dir = os.path.join(self.base_dir, "backup")
+        os.makedirs(backup_dir, exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_file = os.path.join(
+            backup_dir, 
+            f"backup_{os.path.basename(self.active_file)}_{timestamp}"
+        )
+        
+        try:
+            with self._file_lock:
+                shutil.copy2(self.active_file, backup_file)
+            self.log(f"创建备份: {backup_file}", "INFO")
+            return True
+        except Exception as e:
+            self.log(f"备份失败: {str(e)}", "ERROR")
+            return False
 
-    def get_recent_calibrations(self, days=7):
-        """获取最近校准记录"""
-        # 实现查询逻辑...
-        pass
+    def validate_calibration_file(self, filepath: str) -> bool:
+        """
+        验证现有校准文件完整性
+        
+        :param filepath: 校准文件路径
+        :return: 文件是否有效
+        """
+        if not os.path.exists(filepath):
+            self.log(f"文件不存在: {filepath}", "ERROR")
+            return False
+        
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            # 检查文件头
+            if not lines or not lines[0].startswith("!RNX Dual-Polarized Feed Calibration Data"):
+                self.log("无效的文件头", "WARNING")
+                return False
+                
+            # 提取元数据
+            header_points = None
+            for line in lines:
+                if line.startswith("!  Points:"):
+                    header_points = int(line.split(":")[1].strip())
+                    break
+                    
+            if header_points is None:
+                self.log("缺少点数信息", "WARNING")
+                return False
+                
+            # 统计数据行数
+            data_lines = sum(1 for line in lines if not line.startswith("!") and line.strip())
+            if data_lines - 1 != header_points:  # 减去标题行
+                self.log(f"数据点数不匹配: 预期{header_points}, 实际{data_lines-1}", "WARNING")
+                return False
+                
+            # 检查结束标记和校验值
+            if not any(line.startswith("!EndOfData:") for line in lines[-3:]):
+                self.log("缺少结束标记", "WARNING")
+                return False
+                
+            if not any(line.startswith("!MD5:") for line in lines[-3:]):
+                self.log("缺少MD5校验", "WARNING")
+                return False
+                
+            return True
+            
+        except Exception as e:
+            self.log(f"验证失败: {str(e)}", "ERROR")
+            return False
+
+    def get_recent_calibrations(self, days: int = 7) -> List[Dict]:
+        """
+        获取最近校准记录
+        
+        :param days: 查询最近多少天的记录
+        :return: 校准文件信息列表 [{
+                'filename': str,
+                'path': str,
+                'modified': datetime,
+                'size': int
+            }]
+        """
+        recent_files = []
+        cutoff_time = datetime.datetime.now() - datetime.timedelta(days=days)
+        
+        # 搜索主目录和归档目录
+        search_dirs = [self.base_dir, os.path.join(self.base_dir, "archive")]
+        
+        for search_dir in search_dirs:
+            if not os.path.exists(search_dir):
+                continue
+                
+            for root, _, files in os.walk(search_dir):
+                for file in files:
+                    if file.startswith("RNX_Cal_DualPol_") and file.endswith(".csv"):
+                        filepath = os.path.join(root, file)
+                        try:
+                            mtime = datetime.datetime.fromtimestamp(os.path.getmtime(filepath))
+                            if mtime > cutoff_time:
+                                recent_files.append({
+                                    'filename': file,
+                                    'path': filepath,
+                                    'modified': mtime,
+                                    'size': os.path.getsize(filepath),
+                                    'is_archived': "archive" in root
+                                })
+                        except Exception as e:
+                            self.log(f"处理文件{file}失败: {str(e)}", "WARNING")
+        
+        # 按修改时间排序
+        recent_files.sort(key=lambda x: x['modified'], reverse=True)
+        return recent_files
+
+    def get_version_history(self, filepath: str) -> List[str]:
+        """
+        获取文件的版本历史
+        
+        :param filepath: 校准文件路径
+        :return: 版本说明列表
+        """
+        versions = []
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.startswith("!VersionNotes:"):
+                        versions.append(line.split(":", 1)[1].strip())
+        except Exception as e:
+            self.log(f"获取版本历史失败: {str(e)}", "ERROR")
+        return versions
+
 
 class ProcessManager:
     """进程管理单例类，负责检测和防止重复运行"""
