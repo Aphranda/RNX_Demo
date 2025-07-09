@@ -8,6 +8,7 @@ import sys, os, psutil
 import socket, select
 import datetime
 import time
+import atexit # 确保程序退出时清理资源
 
 
 class StatusQueryThread(QThread):
@@ -328,7 +329,6 @@ class TcpClient:
         self.connected = False
         self.last_error = None
 
-
 class SimpleLinkDiagram(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -538,7 +538,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("RNX Quantum Antenna Test System - Demo")
-        self.setGeometry(150, 40, 1600, 1100)
+        self.setGeometry(50, 40, 1800, 1100)
         self.central_widget = QWidget(self)
         self.setCentralWidget(self.central_widget)
         self.status_bar = QStatusBar(self)
@@ -1170,40 +1170,307 @@ class MainWindow(QMainWindow):
         self.status_panel.src_label.setText("信号源状态更新中...")
         self.status_panel.src_label.setStyleSheet("color: #228B22;")
 
+class CalibrationFileManager:
+    """
+    校准文件全生命周期管理类
+    功能涵盖：创建、写入、验证、版本控制、自动归档
+    """
+    def __init__(self, base_dir="calibrations"):
+        import os
+        from datetime import datetime
+        self.base_dir = base_dir
+        self.active_file = None
+        self.current_meta = {}
+        os.makedirs(base_dir, exist_ok=True)
 
+        # 初始化日志（集成到主系统日志）
+        self.log = lambda msg, level: print(f"[CAL {level}] {msg}")  # 替换为实际日志接口
 
+    def create_new_calibration(self, equipment_meta, freq_params):
+        """
+        创建新校准文件
+        :param equipment_meta: dict {
+            'operator': str,
+            'signal_gen': (model, sn),
+            'spec_analyzer': (model, sn),
+            'antenna': (model, sn),
+            'environment': (temp_c, humidity_pct)
+        }
+        :param freq_params: dict {
+            'start_ghz': float,
+            'stop_ghz': float,
+            'step_ghz': float
+        }
+        """
+        from datetime import datetime
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%SZ")
+        
+        # 生成文件名
+        self.current_meta = {
+            **equipment_meta,
+            'freq_params': freq_params,
+            'created': timestamp,
+            'points': int((freq_params['stop_ghz'] - freq_params['start_ghz']) / freq_params['step_ghz']) + 1
+        }
+        
+        filename = (f"RNX_Cal_DualPol_"
+                   f"{freq_params['start_ghz']}to{freq_params['stop_ghz']}GHz_"
+                   f"step{freq_params['step_ghz']}_{timestamp}.csv")
+        
+        self.active_file = os.path.join(self.base_dir, filename)
+        
+        # 写入文件头
+        header = self._generate_header()
+        with open(self.active_file, 'w', encoding='utf-8') as f:
+            f.write(header)
+        
+        self.log(f"Created new calibration: {filename}", "INFO")
+        return self.active_file
 
+    def _generate_header(self):
+        """生成标准文件头"""
+        meta = self.current_meta
+        freq = meta['freq_params']
+        
+        header_lines = [
+            "!RNX Dual-Polarized Feed Calibration Data",
+            f"!Created: {meta['created'].replace('_', 'T')}Z",
+            f"!Operator: {meta['operator']}",
+            "!Equipment:",
+            f"!  Signal_Generator: {meta['signal_gen'][0]}_SN:{meta['signal_gen'][1]}",
+            f"!  Spectrum_Analyzer: {meta['spec_analyzer'][0]}_SN:{meta['spec_analyzer'][1]}",
+            f"!  Antenna: {meta['antenna'][0]}_SN:{meta['antenna'][1]}",
+            f"!Environment: {meta['environment'][0]}C, {meta['environment'][1]}%RH",
+            "!Frequency:",
+            f"!  Start: {freq['start_ghz']} GHz",
+            f"!  Stop: {freq['stop_ghz']} GHz",
+            f"!  Step: {freq['step_ghz']} GHz",
+            f"!  Points: {meta['points']}",
+            "!Data Columns:",
+            "!  1: Frequency(GHz)",
+            "!  2: X_Theta(dB)",
+            "!  3: X_Phi(dB)",
+            "!  4: Ku_Theta(dB)",
+            "!  5: Ku_Phi(dB)",
+            "!  6: K_Theta(dB)",
+            "!  7: K_Phi(dB)",
+            "!  8: Ka_Theta(dB)",
+            "!  9: Ka_Phi(dB)",
+            "Frequency(GHz),X_Theta,X_Phi,Ku_Theta,Ku_Phi,K_Theta,K_Phi,Ka_Theta,Ka_Phi"
+        ]
+        return '\n'.join(header_lines) + '\n'
 
-def count_current_process_instances():
-    current_pid = os.getpid()  # 当前进程PID
-    current_script_path = os.path.abspath(sys.argv[0])  # 当前脚本绝对路径
-    count = 0
-    for proc in psutil.process_iter(['pid', 'cmdline']):
-        try:
-            # 检查进程命令行是否匹配当前脚本路径
-            cmdline = proc.info['cmdline']
-            if cmdline and os.path.abspath(cmdline[0]) == current_script_path:
-                if proc.info['pid'] != current_pid:  # 排除自己
+    def add_data_point(self, freq_ghz, data):
+        """
+        添加单频点数据
+        :param freq_ghz: 当前频率(GHz)
+        :param data: dict {
+            'x_theta': float,
+            'x_phi': float,
+            'ku_theta': float,
+            'ku_phi': float,
+            'k_theta': float,
+            'k_phi': float,
+            'ka_theta': float,
+            'ka_phi': float
+        }
+        """
+        if not self.active_file:
+            raise RuntimeError("No active calibration file")
+        
+        # 验证频率步进
+        expected_points = self.current_meta['points']
+        current_point = int((freq_ghz - self.current_meta['freq_params']['start_ghz']) / 
+                        self.current_meta['freq_params']['step_ghz']) + 1
+        
+        if current_point > expected_points:
+            self.log(f"Frequency {freq_ghz}GHz exceeds stop frequency", "WARNING")
+            return False
+
+        # 格式化数据行
+        data_row = (
+            f"{freq_ghz:.3f},"
+            f"{data.get('x_theta', -99.99):.2f},"
+            f"{data.get('x_phi', -99.99):.2f},"
+            f"{data.get('ku_theta', -99.99):.2f},"
+            f"{data.get('ku_phi', -99.99):.2f},"
+            f"{data.get('k_theta', -99.99):.2f},"
+            f"{data.get('k_phi', -99.99):.2f},"
+            f"{data.get('ka_theta', -99.99):.2f},"
+            f"{data.get('ka_phi', -99.99):.2f}\n"
+        )
+        
+        with open(self.active_file, 'a', encoding='utf-8') as f:
+            f.write(data_row)
+        
+        return True
+
+    def finalize_calibration(self, notes=""):
+        """完成校准并添加校验信息"""
+        if not self.active_file:
+            raise RuntimeError("No active calibration file")
+        
+        # 添加结束标记
+        with open(self.active_file, 'a', encoding='utf-8') as f:
+            f.write(f"!EndOfData: {datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')}\n")
+            if notes:
+                f.write(f"!Notes: {notes}\n")
+        
+        # 生成MD5校验
+        file_hash = self._calculate_file_hash()
+        with open(self.active_file, 'a', encoding='utf-8') as f:
+            f.write(f"!MD5: {file_hash}\n")
+        
+        self.log(f"Calibration finalized: {os.path.basename(self.active_file)}", "SUCCESS")
+        archived_path = self._archive_file()
+        self.active_file = None
+        return archived_path
+
+    def _calculate_file_hash(self):
+        """计算文件校验值"""
+        import hashlib
+        with open(self.active_file, 'rb') as f:
+            return hashlib.md5(f.read()).hexdigest()
+
+    def _archive_file(self):
+        """将文件移动到归档目录"""
+        archive_dir = os.path.join(self.base_dir, "archive")
+        os.makedirs(archive_dir, exist_ok=True)
+        
+        src = self.active_file
+        dst = os.path.join(archive_dir, os.path.basename(src))
+        
+        import shutil
+        shutil.move(src, dst)
+        return dst
+
+    def validate_calibration_file(self, filepath):
+        """验证现有校准文件完整性"""
+        # 实现校验逻辑...
+        pass
+
+    def get_recent_calibrations(self, days=7):
+        """获取最近校准记录"""
+        # 实现查询逻辑...
+        pass
+
+class ProcessManager:
+    """进程管理单例类，负责检测和防止重复运行"""
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+    
+    def __init__(self):
+        if not self._initialized:
+            self._initialized = True
+            self.current_pid = os.getpid()
+            self.script_path = os.path.abspath(sys.argv[0])
+            self.lock_file = os.path.join(
+                os.path.dirname(self.script_path),
+                f".{os.path.basename(self.script_path)}.lock"
+            )
+            self.lock_fd = None
+    
+    def check_duplicate_instance(self):
+        """检查是否有重复实例运行（支持跨平台）"""
+        # 方法1：使用进程名检测（适用于所有平台）
+        duplicate_count = self._count_process_instances()
+        
+        # 方法2：使用文件锁（防止终端多开）
+        if not self._acquire_file_lock():
+            duplicate_count += 1
+        
+        if duplicate_count > 2:
+            self._show_warning_dialog()
+            return True
+        return False
+    
+    def _count_process_instances(self):
+        """统计当前脚本的运行实例数"""
+        count = 0
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                # 跨平台兼容性处理
+                cmdline = proc.info.get('cmdline', [])
+                if (cmdline and 
+                    os.path.abspath(cmdline[0]) == self.script_path and
+                    proc.info['pid'] != self.current_pid):
                     count += 1
-        except (psutil.NoSuchProcess, psutil.AccessDenied, IndexError):
-            continue
-    return count
-
-if __name__ == "__main__":
-
-    if count_current_process_instances() > 2:
-        app = QApplication(sys.argv)  # 先创建QApplication
+            except (psutil.NoSuchProcess, psutil.AccessDenied, IndexError):
+                continue
+        return count
+    
+    def _acquire_file_lock(self):
+        """使用文件锁机制（支持Windows和Linux）"""
+        try:
+            if os.name == 'nt':  # Windows
+                self.lock_fd = os.open(self.lock_file, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+            else:  # Unix-like
+                self.lock_fd = os.open(self.lock_file, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o644)
+            atexit.register(self._release_file_lock)
+            return True
+        except OSError:
+            return False
+    
+    def _release_file_lock(self):
+        """释放文件锁"""
+        if self.lock_fd:
+            os.close(self.lock_fd)
+            try:
+                os.unlink(self.lock_file)
+            except:
+                pass
+            self.lock_fd = None
+    
+    def _show_warning_dialog(self):
+        """显示重复运行警告对话框"""
+        app = QApplication.instance() or QApplication(sys.argv)
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Warning)
-        msg.setWindowTitle("警告")
-        msg.setText("已有相同软件在运行！")
+        msg.setWindowTitle("程序已运行")
+        msg.setText("检测到程序已在运行中！")
         msg.setInformativeText("请勿重复启动本程序。")
         msg.setStandardButtons(QMessageBox.Ok)
-        msg.exec_()  # 等待用户点击确认
         
-        sys.exit(1)  # 用户点击确认后退出
+        # 添加程序图标
+        if hasattr(sys, '_MEIPASS'):  # PyInstaller打包环境
+            icon_path = os.path.join(sys._MEIPASS, 'app.ico')
+        else:
+            icon_path = os.path.join(os.path.dirname(__file__), 'app.ico')
+        
+        if os.path.exists(icon_path):
+            msg.setWindowIcon(QIcon(icon_path))
+        
+        # 居中显示对话框
+        screen = QApplication.primaryScreen()
+        msg.move(
+            screen.geometry().center() - msg.rect().center()
+        )
+        msg.exec_()
+        sys.exit(1)
 
+
+if __name__ == "__main__":
+    # 先检查是否已有实例运行
+    process_mgr = ProcessManager()
+    if process_mgr.check_duplicate_instance():
+        sys.exit(1)
+    
+    # 正常启动主程序
     app = QApplication(sys.argv)
+    
+    # 设置应用程序名称（用于任务管理器识别）
+    app.setApplicationName("RNX Quantum Antenna Test System")
+    app.setApplicationDisplayName("RNX量子天线测试系统")
+    
+    # # 加载样式表
+    # with open("style.qss", "r", encoding="utf-8") as f:
+    #     app.setStyleSheet(f.read())
+    
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
