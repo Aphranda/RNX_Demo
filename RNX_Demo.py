@@ -1,10 +1,10 @@
 from PyQt5.QtWidgets import (
     QMainWindow, QApplication, QStatusBar, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QComboBox, QLineEdit, QTextEdit, QGroupBox, QGridLayout, QSizePolicy
+    QPushButton, QLabel, QComboBox, QLineEdit, QTextEdit, QGroupBox, QGridLayout, QSizePolicy,QMessageBox
 )
 from PyQt5.QtGui import QFont, QColor, QPainter, QPen
 from PyQt5.QtCore import Qt, QPointF, QThread, pyqtSignal, QMutex
-import sys
+import sys, os, psutil
 import socket
 import datetime
 import time
@@ -19,6 +19,7 @@ class StatusQueryThread(QThread):
         self.port = int(port)
         self.mutex = mutex
         self._running = True
+        self.Is_moving = False  # 新增标志位
 
     def run(self):
         axes = ["X", "KU", "K", "KA", "Z"]
@@ -133,11 +134,12 @@ class TcpClient:
             while True:
                 try:
                     data = self.sock.recv(bufsize)
+                    print(f"接收数据: {data}")
                     if not data:
                         break
                     chunks.append(data)
                     # 如果收到的数据已包含换行或结尾符，认为一条指令结束
-                    if b'\n' in data or b'\r' in data:
+                    if b'\r\n' in data or b'\r' in data:
                         break
                 except socket.timeout:
                     break
@@ -295,7 +297,7 @@ class StatusPanel(QWidget):
         self.motion_label.setProperty("panelTitle", True)
         motion_layout.addWidget(self.motion_label)
 
-        motion_layout.addSpacing(-30)  # 减少标题与内容间距
+
 
         self.motion_grid = QGridLayout()
         self.motion_grid.setSpacing(6)
@@ -334,7 +336,7 @@ class StatusPanel(QWidget):
         self.src_label.setProperty("panelTitle", True)
         src_layout.addWidget(self.src_label)
 
-        src_layout.addSpacing(-20)  # 减少标题与内容间距
+        
 
         self.src_grid = QGridLayout()
         self.src_grid.setSpacing(6)
@@ -572,7 +574,7 @@ class MainWindow(QMainWindow):
         src_layout.addWidget(self.freq_query_btn, 0, 3)
         src_layout.addWidget(QLabel("功率:"), 1, 0)
         self.power_input = QLineEdit()
-        self.power_input.setPlaceholderText("如 -10dBm")
+        self.power_input.setPlaceholderText("如 -40dBm")
         src_layout.addWidget(self.power_input, 1, 1)
         self.power_btn = QPushButton("设置功率")
         self.power_btn.clicked.connect(self.send_power_cmd)
@@ -790,6 +792,7 @@ class MainWindow(QMainWindow):
                 self.show_status(msg)
                 return
             success, resp = self.tcp_client.receive()
+            print(f"Received: {resp}")  # 调试输出
             if success:
                 self.log(resp, "RECV")
                 self.show_status("指令已发送。")
@@ -901,7 +904,37 @@ class MainWindow(QMainWindow):
         self.status_panel.src_label.setText("信号源状态更新中...")
         self.status_panel.src_label.setStyleSheet("color: #228B22;")
 
+def count_current_process_instances():
+    current_pid = os.getpid()  # 当前进程PID
+    current_script_path = os.path.abspath(sys.argv[0])  # 当前脚本绝对路径
+    count = 0
+    for proc in psutil.process_iter(['pid', 'cmdline']):
+        try:
+            # 检查进程命令行是否匹配当前脚本路径
+            cmdline = proc.info['cmdline']
+            if cmdline and os.path.abspath(cmdline[0]) == current_script_path:
+                print(f"检测到进程: {proc.info['pid']} - {cmdline[0]}")
+                if proc.info['pid'] != current_pid:  # 排除自己
+                    count += 1
+                    print(count, "个相同脚本实例在运行")
+        except (psutil.NoSuchProcess, psutil.AccessDenied, IndexError):
+            continue
+    return count
+
 if __name__ == "__main__":
+
+    if count_current_process_instances() > 2:
+        print("已有相同脚本在运行，禁止重复启动！")
+        app = QApplication(sys.argv)  # 先创建QApplication
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Warning)
+        msg.setWindowTitle("警告")
+        msg.setText("已有相同软件在运行！")
+        msg.setInformativeText("请勿重复启动本程序。")
+        msg.setStandardButtons(QMessageBox.Ok)
+        msg.exec_()  # 等待用户点击确认
+        
+        sys.exit(1)  # 用户点击确认后退出
 
     app = QApplication(sys.argv)
     window = MainWindow()
