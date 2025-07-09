@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (
     QMainWindow, QApplication, QStatusBar, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QComboBox, QLineEdit, QTextEdit, QGroupBox, QGridLayout, QSizePolicy,QMessageBox
+    QPushButton, QLabel, QComboBox, QLineEdit, QTextEdit, QGroupBox, QGridLayout, QSizePolicy,QMessageBox,QCheckBox
 )
 from PyQt5.QtGui import QFont, QColor, QPainter, QPen
 from PyQt5.QtCore import Qt, QPointF, QThread, pyqtSignal, QMutex
@@ -533,6 +533,7 @@ class StatusPanel(QWidget):
         self.src_rf.setProperty("statusValue", True)
         self.src_grid.addWidget(self.src_rf, 2, 1)
 
+
         # 新增：校准文件状态
         self.src_grid.addWidget(QLabel("校准文件:"), 3, 0)
         self.cal_file_status = QLabel("未加载")
@@ -570,6 +571,10 @@ class MainWindow(QMainWindow):
         self.tcp_client = TcpClient()
         self.comm_mutex = QMutex()
         self.status_thread = None
+
+        self.cal_manager = None  # 添加这行初始化
+        self.compensation_enabled = False  # 同时初始化补偿标志
+        self.calibration_data = None  # 初始化校准数据
 
         self.status_cache = {
             "motion": {axis: {"reach": "-", "home": "-", "speed": "-"} for axis in ["X", "KU", "K", "KA", "Z"]},
@@ -758,6 +763,7 @@ class MainWindow(QMainWindow):
         # 新增：校准文件加载
         self.status_panel.load_cal_btn.clicked.connect(self.load_calibration_file)
 
+
         # 信号源控制
         src_group = QGroupBox("信号源控制")
         src_layout = QGridLayout()
@@ -911,7 +917,9 @@ class MainWindow(QMainWindow):
         else:
             self.show_status("未连接到设备。")
             self.log("未连接到设备。", "WARNING")
-    
+
+
+
     # def load_calibration_file(self):
     #     """加载校准文件"""
     #     from PyQt5.QtWidgets import QFileDialog
@@ -959,7 +967,11 @@ class MainWindow(QMainWindow):
         """加载校准文件"""
         from PyQt5.QtWidgets import QFileDialog
 
-        cal = CalibrationFileManager(log_callback=self.log)
+        # cal = CalibrationFileManager(log_callback=self.log)
+        # cal.generate_default_calibration((8,40),0.01)
+        # 确保cal_manager已初始化
+        if self.cal_manager is None:
+            self.cal_manager = CalibrationFileManager(log_callback=self.log)
         
         # 获取最近校准文件目录
         cal_dir = "calibrations"  # 默认目录
@@ -973,35 +985,39 @@ class MainWindow(QMainWindow):
             cal_dir, 
             "校准文件 (*.csv *.bin);;所有文件 (*)"
         )
+
+        
         
         if file_path:
             self.status_panel.cal_file_input.setText(file_path)
             self.log(f"已选择校准文件: {file_path}", "INFO")
-            
-            # 验证文件
-            if not hasattr(self, 'cal_manager'):
-                self.cal_manager = CalibrationFileManager(log_callback=self.log)
-            
+
             # 打印文件内容验证
             if file_path.lower().endswith('.bin'):
                 self._print_bin_file_contents(file_path)  # 调用解耦后的BIN文件打印函数
             elif file_path.lower().endswith('.csv'):
                 self._print_csv_file_contents(file_path)
-                
-            if self.cal_manager.validate_calibration_file(file_path):
+            
+            # 使用CalibrationFileManager加载文件
+            if not hasattr(self, 'cal_manager'):
+                self.cal_manager = CalibrationFileManager(log_callback=self.log)
+            
+            result = self.cal_manager.load_calibration_file(file_path)
+            if result:
+                self.calibration_data = result['data']
+                self.compensation_enabled = True
                 self.status_panel.cal_file_status.setText("已加载")
                 self.status_panel.cal_file_status.setStyleSheet(
                     "background:#b6f5c6; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
                 )
-                self.show_status(f"校准文件有效: {os.path.basename(file_path)}")
-                self.log("校准文件验证通过", "SUCCESS")
+                self.log("校准文件加载成功，补偿功能已启用", "SUCCESS")
             else:
+                self.compensation_enabled = False
                 self.status_panel.cal_file_status.setText("无效")
                 self.status_panel.cal_file_status.setStyleSheet(
                     "background:#ffcdd2; color:#d32f2f; border:2px solid #0078d7; border-radius:8px;"
                 )
-                self.show_status("校准文件无效")
-                self.log("校准文件验证失败", "ERROR")
+                self.log("校准文件加载失败", "ERROR")
 
     def _print_bin_file_contents(self, bin_path: str):
         """打印BIN文件内容用于验证数据正确性"""
@@ -1102,6 +1118,22 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.log(f"读取CSV文件失败: {str(e)}", "ERROR")
 
+    def get_compensation_value(self, freq_ghz: float) -> float:
+        """
+        根据频率获取补偿值
+        :param freq_ghz: 频率(GHz)
+        :return: 补偿值(dB)
+        """
+        if not self.compensation_enabled or not self.calibration_data:
+            return 0.0
+        
+        # 找到最接近的频率点
+        closest_point = min(self.calibration_data,key=lambda x: abs(x['freq'] - freq_ghz))
+        
+        # 这里假设使用X_Theta的补偿值，可以根据实际需求修改
+        return closest_point.get('x_theta', 0.0)
+
+
 
     # --- 指令组合与发送 ---
     def send_link_cmd(self):
@@ -1162,12 +1194,77 @@ class MainWindow(QMainWindow):
         if not val:
             self.show_status("请输入功率参数")
             return
-        cmd = f"SOURce:POWer {val}"
-        self.send_and_log(cmd)
+        
+        try:
+            # 解析输入的功率值
+            power_dbm = float(val.replace("dBm", "").strip())
+            
+            # 获取当前频率
+            freq_str = self.status_cache["src"].get("freq", "0")
+            freq_ghz = float(freq_str.replace("GHz", "").strip()) if "GHz" in freq_str else float(freq_str)/1e9
+            
+            # 计算补偿值
+            compensation = self.get_compensation_value(freq_ghz) if self.compensation_enabled else 0.0
+            compensated_power = power_dbm - compensation
+            
+            # 存储原始功率值
+            self.current_power = power_dbm
+            
+            cmd = f"SOURce:POWer {compensated_power:.2f}"
+            self.send_and_log(cmd)
+            
+            self.log(f"功率补偿: 设置值={power_dbm:.2f}dBm, 补偿值={compensation:.2f}dB, 实际设置={compensated_power:.2f}dBm", "INFO")
+        except ValueError:
+            self.show_status("无效的功率参数")
+            self.log("无效的功率参数", "ERROR")
 
     def query_power_cmd(self):
         cmd = "READ:SOURce:POWer?"
-        self.send_and_log(cmd)
+        if self.compensation_enabled:
+            # 优先暂停状态线程，防止抢占
+            if self.status_thread and self.status_thread.isRunning():
+                self.status_thread._running = False
+                self.status_thread.wait()
+            
+            self.comm_mutex.lock()
+            try:
+                self.log(cmd, "SEND")
+                success, msg = self.tcp_client.send(cmd + '\n')
+                if not success:
+                    self.log(f"发送失败: {msg}", "ERROR")
+                    self.show_status(msg)
+                    return
+                
+                success, resp = self.tcp_client.receive()
+                if success:
+                    try:
+                        # 解析查询到的功率值
+                        measured_power = float(resp.replace("dBm", "").strip())
+                        
+                        # 获取当前频率
+                        freq_str = self.status_cache["src"].get("freq", "0")
+                        freq_ghz = float(freq_str.replace("GHz", "").strip()) if "GHz" in freq_str else float(freq_str)/1e9
+                        
+                        # 计算补偿值
+                        compensation = self.get_compensation_value(freq_ghz)
+                        actual_power = measured_power + compensation
+                        
+                        self.log(f"{resp} (补偿后: {actual_power:.2f}dBm)", "RECV")
+                        self.show_status(f"查询功率: {actual_power:.2f}dBm (补偿值: {compensation:.2f}dB)")
+                    except ValueError:
+                        self.log(resp, "RECV")
+                        self.show_status("查询功率")
+                else:
+                    self.log(f"接收失败: {resp}", "ERROR")
+                    self.show_status(resp)
+            finally:
+                self.comm_mutex.unlock()
+                # 手动指令完成后重启状态线程
+                if self.status_thread:
+                    self.status_thread._running = True
+                    self.status_thread.start()
+        else:
+            self.send_and_log(cmd)
 
     def send_output_cmd(self):
         val = self.output_combo.currentText()
@@ -1344,7 +1441,31 @@ class MainWindow(QMainWindow):
         freq_disp = format_freq(src.get("freq", "-"))
         self.status_panel.src_freq.setText(freq_disp)
         set_status_color(self.status_panel.src_freq, freq_disp)
-        power_disp = format_power(src.get("power", "-"))
+        # power_disp = format_power(src.get("power", "-"))
+        # self.status_panel.src_power.setText(power_disp)
+        # set_status_color(self.status_panel.src_power, power_disp)
+
+        # 功率显示加入补偿
+        power_str = src.get("power", "-")
+        if power_str != "-" and self.compensation_enabled:
+            try:
+                # 解析查询到的功率值
+                measured_power = float(power_str.replace("dBm", "").strip())
+                
+                # 获取当前频率
+                freq_str = src.get("freq", "0")
+                freq_ghz = float(freq_str.replace("GHz", "").strip()) if "GHz" in freq_str else float(freq_str)/1e9
+                
+                # 计算补偿值
+                compensation = self.get_compensation_value(freq_ghz)
+                actual_power = measured_power + compensation
+                
+                power_disp = f"{actual_power:.2f} dBm (补偿: {compensation:.2f} dB)"
+            except ValueError:
+                power_disp = power_str
+        else:
+            power_disp = power_str
+        
         self.status_panel.src_power.setText(power_disp)
         set_status_color(self.status_panel.src_power, power_disp)
 
@@ -1555,10 +1676,10 @@ class CalibrationFileManager:
                 freq = stop_ghz
                 
             zero_data = {
-                'x_theta': 0.0, 'x_phi': 0.0,
-                'ku_theta': 0.0, 'ku_phi': 0.0,
-                'k_theta': 0.0, 'k_phi': 0.0,
-                'ka_theta': 0.0, 'ka_phi': 0.0
+                'x_theta': 1.0, 'x_phi': 1.0,
+                'ku_theta': 1.0, 'ku_phi': 1.0,
+                'k_theta': 1.0, 'k_phi': 1.0,
+                'ka_theta': 1.0, 'ka_phi': 1.0
             }
             self.add_data_point(round(freq, 6), zero_data)  # 保留6位小数避免浮点误差
         
@@ -1830,7 +1951,6 @@ class CalibrationFileManager:
         shutil.move(src, dst)
         return dst
 
-
     def _backup_file(self) -> bool:
         """创建备份文件"""
         if not self.active_file:
@@ -2009,8 +2129,6 @@ class CalibrationFileManager:
         
         except Exception as e:
             self.log(f"读取BIN文件失败: {str(e)}", "ERROR")
-
-
 
     def get_recent_calibrations(self, days: int = 7) -> List[Dict]:
         """
