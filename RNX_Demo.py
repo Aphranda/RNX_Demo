@@ -2,7 +2,7 @@ from PyQt5.QtWidgets import (
     QMainWindow, QApplication, QStatusBar, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QComboBox, QLineEdit, QTextEdit, QGroupBox, QGridLayout, QSizePolicy,QMessageBox,QCheckBox
 )
-from PyQt5.QtGui import QFont, QColor, QPainter, QPen
+from PyQt5.QtGui import QFont, QColor, QPainter, QPen, QFontMetrics
 from PyQt5.QtCore import Qt, QPointF, QThread, pyqtSignal, QMutex
 from PyQt5.QtGui import QRegExpValidator
 from PyQt5.QtCore import QRegExp
@@ -446,6 +446,90 @@ class SimpleLinkDiagram(QLabel):
             painter.drawText(node_x + node_w // 2 + 8, ny, int(100 * 1.2), node_h, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, name)
 
         painter.end()
+
+class AutoFontSizeLabel(QLabel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._min_font_size = 6
+        self._max_font_size = 24
+        self._content_margin = 5  # 像素边距
+        
+    def resizeEvent(self, event):
+        self.adjust_font_size()
+        super().resizeEvent(event)
+        
+    def adjust_font_size(self):
+        metrics = QFontMetrics(self.font())
+        text_width = metrics.horizontalAdvance(self.text())
+        available_width = self.width() - 2 * self._content_margin
+        
+        if text_width > available_width and available_width > 0:
+            # 计算合适的字体大小
+            ratio = available_width / text_width
+            new_size = max(self._min_font_size, 
+                          min(self._max_font_size, 
+                              int(self.font().pointSize() * ratio)))
+            
+            font = self.font()
+            font.setPointSize(new_size)
+            self.setFont(font)
+
+class AutoFontSizeComboBox(QComboBox):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._min_font_size = 8
+        self._max_font_size = 14
+        self._content_margin = 5
+        
+    def showPopup(self):
+        # 在显示下拉菜单前调整字体大小
+        self.adjust_popup_font()
+        super().showPopup()
+        
+    def adjust_popup_font(self):
+        # 获取下拉视图
+        view = self.view()
+        if not view:
+            return
+            
+        # 计算最大文本宽度
+        metrics = QFontMetrics(view.font())
+        max_width = max(metrics.horizontalAdvance(self.itemText(i)) 
+                      for i in range(self.count()))
+        
+        # 计算可用宽度
+        available_width = view.width() - 2 * self._content_margin
+        
+        if max_width > available_width and available_width > 0:
+            # 计算合适的字体大小
+            ratio = available_width / max_width
+            new_size = max(self._min_font_size,
+                          min(self._max_font_size,
+                              int(view.font().pointSize() * ratio)))
+            
+            font = view.font()
+            font.setPointSize(new_size)
+            view.setFont(font)
+            
+    def resizeEvent(self, event):
+        # 主控件也调整字体
+        self.adjust_main_font()
+        super().resizeEvent(event)
+        
+    def adjust_main_font(self):
+        metrics = QFontMetrics(self.font())
+        text_width = metrics.horizontalAdvance(self.currentText())
+        available_width = self.width() - 2 * self._content_margin
+        
+        if text_width > available_width and available_width > 0:
+            ratio = available_width / text_width
+            new_size = max(self._min_font_size,
+                          min(self._max_font_size,
+                              int(self.font().pointSize() * ratio)))
+            
+            font = self.font()
+            font.setPointSize(new_size)
+            self.setFont(font)
 
 
 class SignalUnitConverter:
@@ -1147,6 +1231,8 @@ class StatusPanel(QWidget):
         h_layout = QHBoxLayout(self)
         h_layout.setContentsMargins(18, 5, 18, 5)
         h_layout.setSpacing(10)
+
+
 
         # 单位换算实例化
         self.unit_converter = SignalUnitConverter()
@@ -2201,158 +2287,290 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage(message)
 
     def update_status_panel(self, status):
+        """Main method to update the status panel"""
+        self._update_status_cache(status)
+        self._refresh_motion_display()
+        self._refresh_source_display()
+
+    def _update_status_cache(self, status):
+        """Update the internal status cache"""
+        # Update motion status
         axes = ["X", "KU", "K", "KA", "Z"]
-        # 更新缓存
         for axis in axes:
             if axis in status.get("motion", {}):
                 for key in ["reach", "home", "speed"]:
                     val = status["motion"][axis].get(key)
                     if val is not None:
                         self.status_cache["motion"][axis][key] = val
+        
+        # Update source status
         for key in ["freq", "power", "rf"]:
             val = status.get("src", {}).get(key)
             if val is not None:
                 self.status_cache["src"][key] = val
 
-        def set_status_color(label, text):
-            if text is None:
-                text = "-"
-            if any(x in text.upper() for x in ["NO", "FAIL"]):
-                label.setStyleSheet("background:#fff9c4; color:#0078d7; border:2px solid #0078d7; border-radius:8px;")
-            elif any(x in text.upper() for x in ["OK", "PASS"]):
-                label.setStyleSheet("background:#b6f5c6; color:#0078d7; border:2px solid #0078d7; border-radius:8px;")
-            elif any(x in text for x in ["超时", "timeout", "连接失败"]):
-                label.setStyleSheet("background:#ffcdd2; color:#d32f2f; border:2px solid #0078d7; border-radius:8px;")
-            else:
-                label.setStyleSheet("background:#f5faff; color:#0078d7; border:2px solid #0078d7; border-radius:8px;")
-
-        # 刷新界面，始终显示所有缓存值
+    def _refresh_motion_display(self):
+        """Refresh all motion-related UI elements"""
+        axes = ["X", "KU", "K", "KA", "Z"]
+        
         for axis in axes:
             axis_status = self.status_cache["motion"][axis]
-            # 达位
-            if axis == "Z":
-                self.status_panel.motion_reach[axis].setText("NO Pa")
-                set_status_color(self.status_panel.motion_reach[axis], "NO Pa")
-            else:
-                txt = axis_status.get("reach", "-")
-                self.status_panel.motion_reach[axis].setText(txt)
-                set_status_color(self.status_panel.motion_reach[axis], txt)
-            # 复位
-            txt = axis_status.get("home", "-")
-            self.status_panel.motion_home[axis].setText(txt)
-            set_status_color(self.status_panel.motion_home[axis], txt)
-            # 速度
-            txt = axis_status.get("speed", "-")
-            self.status_panel.motion_speed[axis].setText(txt)
-            # 根据速度等级着色（橙黄系，和蓝色对比强）
-            speed_color = {
-                "LOW":   "#ffe082",
-                "MID1":  "#ffd54f",
-                "MID2":  "#ffb300",
-                "MID3":  "#ff8f00",
-                "HIGH":  "#ff6f00"
-            }
-            bg = speed_color.get(txt.upper(), "#f5faff")
-            self.status_panel.motion_speed[axis].setStyleSheet(
-                f"background:{bg}; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
+            
+            # Update reach status
+            reach_text = "NO Pa" if axis == "Z" else axis_status.get("reach", "-")
+            self._update_status_label(
+                self.status_panel.motion_reach[axis],
+                reach_text
             )
-
-
-        # 信号源
-        src = self.status_cache["src"]
-        # ==== 新增：状态颜色设置 ====
+            
+            # Update home status
+            self._update_status_label(
+                self.status_panel.motion_home[axis],
+                axis_status.get("home", "-")
+            )
+            
+            # Update speed status with special coloring
+            speed_text = axis_status.get("speed", "-")
+            self.status_panel.motion_speed[axis].setText(speed_text)
+            self._set_speed_background(axis, speed_text)
         
-        # ==== 新增：格式化频率和功率 ====
-        def format_freq(freq_str):
+        # Update operation status
+        self._update_operation_status()
+
+    def _refresh_source_display(self):
+        """Refresh source display with precise 9-character formatting"""
+        src = self.status_cache["src"]
+        
+        # Frequency display (9 chars)
+        freq_text = self._format_quantity(src.get("freq", "-"), "frequency")
+        self._update_status_label(self.status_panel.src_freq, freq_text)
+        
+        # Raw power display (9 chars)
+        raw_power_text = self._format_quantity(
+            src.get("power", "-"), 
+            "power",
+            target_widget="src_raw_power"
+        )
+        self._update_status_label(self.status_panel.src_raw_power, raw_power_text)
+        
+        # Feed power display with compensation (9 chars)
+        feed_power_text = self._format_quantity(
+            src.get("power", "-"), 
+            "power",
+            target_widget="src_power"
+        )
+        
+        if feed_power_text != "-" and self.compensation_enabled:
             try:
-                freq = str(freq_str).replace("Hz", "").replace("hz", "").replace(" ", "")
-                freq_val = float(freq)
-                # 科学计数法或大数转GHz
-                if freq_val >= 1e6:
-                    return f"{freq_val/1e9:.6f} GHz"
-                else:
-                    return f"{freq_val} Hz"
-            except Exception:
-                return str(freq_str)
-
-        def format_power(power_str):
-            try:
-                power = str(power_str).replace("dBm", "").replace("dbm", "").replace(" ", "")
-                power_val = float(power)
-                return f"{power_val:.2f} dBm"
-            except Exception:
-                return str(power_str)
-
-        freq_disp = format_freq(src.get("freq", "-"))
-        self.status_panel.src_freq.setText(freq_disp)
-        set_status_color(self.status_panel.src_freq, freq_disp)
-
-        power_raw_disp = format_power(src.get("power", "-"))
-        self.status_panel.src_raw_power.setText(power_raw_disp)
-        set_status_color(self.status_panel.src_raw_power, power_raw_disp)
-
-        # 功率显示加入补偿
-        power_str = src.get("power", "-")
-        if power_str != "-" and self.compensation_enabled:
-            try:
-                # 解析查询到的功率值
-                measured_power = float(power_str.replace("dBm", "").strip())
+                # Extract numeric value (handling different unit formats)
+                parts = feed_power_text.split()
+                if len(parts) == 2:
+                    power_value = float(parts[0])
+                    unit = parts[1]
+                else:  # Handle cases like "123.45dBm"
+                    for i, c in enumerate(feed_power_text):
+                        if c.isalpha():
+                            power_value = float(feed_power_text[:i])
+                            unit = feed_power_text[i:]
+                            break
                 
-                # 获取当前频率
+                # Apply compensation
                 freq_str = src.get("freq", "0")
                 freq_ghz = float(freq_str.replace("GHz", "").strip()) if "GHz" in freq_str else float(freq_str)/1e9
-                
-                # 计算补偿值
                 compensation = self.get_compensation_value(freq_ghz)
-                actual_power = measured_power + compensation
+                actual_power = power_value + compensation
                 
-                power_disp = f"{actual_power:.2f} dBm"
-            except ValueError:
-                power_disp = format_power(power_str)
-        else:
-            power_disp = format_power(power_str)
+                # Reformat with same unit (ensure 9 chars)
+                if unit in ["dBμV/m", "dBuV/m"]:
+                    feed_power_text = f"{actual_power:>6.2f}{unit}"
+                elif unit == "dBm":
+                    feed_power_text = f"{actual_power:>6.3f} {unit}"
+                else:
+                    feed_power_text = f"{actual_power:>6.4f}{unit}"
+                    
+            except (ValueError, IndexError):
+                pass
         
-        self.status_panel.src_power.setText(power_disp)
-        set_status_color(self.status_panel.src_power, power_disp)
+        self._update_status_label(self.status_panel.src_power, feed_power_text)
+        
+        # RF status (fixed width)
+        rf_status = src.get("rf", "-").ljust(9)
+        self._update_status_label(
+            self.status_panel.src_rf, 
+            rf_status,
+            custom_style="ON" if rf_status.strip().upper() == "ON" else None
+        )
+        
+        # Update unit colors
+        self._update_unit_combo_colors()
 
-        # RF输出显示 - 直接添加条件判断
-        rf_status = src.get("rf", "-")
-        self.status_panel.src_rf.setText(rf_status)
-        if rf_status.upper() == "ON":
-            self.status_panel.src_rf.setStyleSheet(
-                "background:#b6f5c6; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
-            )
-        else:
-            # 使用默认样式
-            self.status_panel.src_rf.setStyleSheet(
-                "background:#f5faff; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
-            )
 
-        # 更新状态标签显示
+
+    def _update_operation_status(self):
+        """Update the current operation status display"""
         if self.status_thread and self.status_thread.current_operation:
             operation = self.status_thread.current_operation
             axis = self.status_thread.operating_axis
+            
+            label = self.status_panel.motion_label
             if operation == "HOMING":
-                self.status_panel.motion_label.setText(f"{axis}轴复位中...")
-                self.status_panel.motion_label.setStyleSheet("color: #ff8f00;")  # 橙色
+                label.setText(f"{axis}轴复位中...")
+                label.setStyleSheet("color: #ff8f00;")
             elif operation == "FEEDING":
-                self.status_panel.motion_label.setText(f"{axis}轴达位中...")
-                self.status_panel.motion_label.setStyleSheet("color: #ff8f00;")  # 橙色
-            # 检查操作是否完成
+                label.setText(f"{axis}轴达位中...")
+                label.setStyleSheet("color: #ff8f00;")
+            
+            # Check if operation completed
             axis_status = self.status_cache["motion"].get(axis, {})
             if (operation == "HOMING" and "OK" in axis_status.get("home", "")) or \
             (operation == "FEEDING" and "OK" in axis_status.get("reach", "")):
                 self.status_thread.current_operation = None
                 self.status_thread.operating_axis = None
-                self.status_panel.motion_label.setText("运动状态: 就绪")
-                self.status_panel.motion_label.setStyleSheet("color: #228B22;")  # 绿色
+                label.setText("运动状态: 就绪")
+                label.setStyleSheet("color: #228B22;")
         else:
             self.status_panel.motion_label.setText("运动状态: 就绪")
-            self.status_panel.motion_label.setStyleSheet("color: #228B22;")  # 绿色
+            self.status_panel.motion_label.setStyleSheet("color: #228B22;")
+
+    def _update_status_label(self, label, text, custom_style=None):
+        """Update status label with fixed-width formatting"""
+        # Ensure text is exactly 9 characters wide
+        display_text = str(text).strip()[:9].ljust(9)
+        label.setText(display_text)
         
-        # 信号源状态标签保持不变
-        self.status_panel.src_label.setText("信号源状态更新中...")
-        self.status_panel.src_label.setStyleSheet("color: #228B22;")
+        # Set font to monospace for perfect alignment
+        # font = QFont("Courier New", 24)  # Monospaced font
+        # font.setBold(True)
+        # label.setFont(font)
+        
+        # Apply styling
+        if custom_style == "ON":
+            label.setStyleSheet(
+                "background:#b6f5c6; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
+            )
+        else:
+            self._set_status_color(label, display_text)
+
+
+    def _set_status_color(self, label, text):
+        """Set the color scheme based on status text"""
+        if any(x in text.upper() for x in ["NO", "FAIL"]):
+            style = "background:#fff9c4; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
+        elif any(x in text.upper() for x in ["OK", "PASS"]):
+            style = "background:#b6f5c6; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
+        elif any(x in text for x in ["超时", "timeout", "连接失败"]):
+            style = "background:#ffcdd2; color:#d32f2f; border:2px solid #0078d7; border-radius:8px;"
+        else:
+            style = "background:#f5faff; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
+        
+        label.setStyleSheet(style)
+
+    def _update_unit_combo_colors(self):
+        """Update the colors of unit combo boxes based on current selection"""
+        # Power unit combo
+        power_unit = self.status_panel.power_unit_combo.currentText()
+        power_color = self.status_panel.unit_converter.get_power_unit_color(power_unit)
+        self.status_panel.power_unit_combo.setStyleSheet(
+            f"background: {power_color}; color: white;"
+        )
+        
+        # Raw power unit combo
+        raw_power_unit = self.status_panel.raw_power_unit_combo.currentText()
+        raw_power_color = self.status_panel.unit_converter.get_power_unit_color(raw_power_unit)
+        self.status_panel.raw_power_unit_combo.setStyleSheet(
+            f"background: {raw_power_color}; color: white;"
+        )
+        
+        # Frequency unit combo (optional)
+        freq_color = "#0078d7"  # Default blue
+        self.status_panel.freq_unit_combo.setStyleSheet(
+            f"background: {freq_color}; color: white;"
+        )
+
+
+    def _set_speed_background(self, axis, speed_text):
+        """Set the background color for speed labels"""
+        speed_color = {
+            "LOW": "#ffe082",
+            "MID1": "#ffd54f",
+            "MID2": "#ffb300",
+            "MID3": "#ff8f00",
+            "HIGH": "#ff6f00"
+        }
+        bg = speed_color.get(speed_text.upper(), "#f5faff")
+        self.status_panel.motion_speed[axis].setStyleSheet(
+            f"background:{bg}; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
+        )
+
+    def _format_quantity(self, value, quantity_type, target_widget=None):
+        """Format numeric values with precise units (9 chars total including sign)"""
+        if value == "-" or value is None:
+            return "-".ljust(9)  # Ensure fixed width
+        
+        try:
+            if quantity_type == "frequency":
+                current_unit = self.status_panel.freq_unit_combo.currentText()
+                value = str(value).replace("Hz", "").replace("hz", "").replace(" ", "")
+                num = float(value)
+                
+                converted_value, unit = self.status_panel.unit_converter.convert_frequency(
+                    num, "Hz", current_unit
+                )
+                
+                # Precision formatting for 9-character display
+                if unit == "GHz":
+                    if abs(converted_value) >= 100:
+                        return f"{converted_value:>6.3f} {unit}"  # e.g. " 123.456 GHz" (9 chars)
+                    elif abs(converted_value) >= 10:
+                        return f"{converted_value:>6.4f} {unit}"  # e.g. " 12.3456 GHz" (9 chars)
+                    else:
+                        return f"{converted_value:>6.5f} {unit}"  # e.g. " 1.23456 GHz" (9 chars)
+                
+                elif unit == "MHz":
+                    return f"{int(converted_value):>7} {unit}"  # e.g. " 1234567 MHz" (9 chars)
+                
+                elif unit == "kHz":
+                    return f"{int(converted_value):>7} {unit}"  # e.g. " 1234567 kHz" (9 chars)
+                
+                else:  # Hz
+                    return f"{int(converted_value):>7} {unit}"  # e.g. " 1234567 Hz" (9 chars)
+            
+            elif quantity_type == "power":
+                if target_widget == "src_power":
+                    current_unit = self.status_panel.power_unit_combo.currentText()
+                else:
+                    current_unit = self.status_panel.raw_power_unit_combo.currentText()
+                
+                value = str(value).replace("dBm", "").replace("dbm", "").replace(" ", "")
+                num = float(value)
+                
+                # Handle E-field units
+                if current_unit in self.status_panel.unit_converter.E_FIELD_UNITS:
+                    converted_value, unit = self.status_panel.unit_converter.power_density_to_efield(num, "dBm")
+                    converted_value, unit = self.status_panel.unit_converter.convert_efield(converted_value, "V/m", current_unit)
+                    
+                    # Precision formatting for E-field (9 chars)
+                    if unit in ["dBμV/m", "dBuV/m"]:
+                        return f"{converted_value:>6.2f}{unit}"  # e.g. " 123.45dBμV/m" (9 chars)
+                    else:
+                        return f"{converted_value:>6.3f} {unit}"  # e.g. " 1.234 V/m" (9 chars)
+                else:
+                    converted_value, unit = self.status_panel.unit_converter.convert_power(num, "dBm", current_unit)
+                    
+                    # Precision formatting for power (9 chars)
+                    if unit == "dBm":
+                        return f"{converted_value:>6.3f} {unit}"  # e.g. "-123.456dBm" (9 chars)
+                    elif unit == "W":
+                        return f"{converted_value:>6.3g} {unit}"  # Scientific if needed
+                    else:
+                        return f"{converted_value:>6.4f}{unit}"  # e.g. "1.2345mW" (9 chars)
+        
+        except ValueError:
+            return str(value)[:9].ljust(9)  # Truncate to 9 chars if error
+        
+        return str(value)[:9].ljust(9)  # Fallback
+
+
 
 
 
