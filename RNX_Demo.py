@@ -453,26 +453,44 @@ class AutoFontSizeLabel(QLabel):
         self._min_font_size = 6
         self._max_font_size = 24
         self._content_margin = 5  # 像素边距
+        self._base_font_size = self.font().pointSize()  # 存储基础字体大小
         
     def resizeEvent(self, event):
         self.adjust_font_size()
         super().resizeEvent(event)
         
+    def setText(self, text):
+        super().setText(text)
+        self.adjust_font_size()
+        
     def adjust_font_size(self):
-        metrics = QFontMetrics(self.font())
-        text_width = metrics.horizontalAdvance(self.text())
+        text = self.text()
+        if not text:
+            return
+            
+        # 使用基础字体大小进行计算
+        base_font = QFont(self.font())
+        base_font.setPointSize(self._base_font_size)
+        base_metrics = QFontMetrics(base_font)
+        
+        text_width = base_metrics.horizontalAdvance(text)
         available_width = self.width() - 2 * self._content_margin
         
+        # 计算合适的字体大小
         if text_width > available_width and available_width > 0:
-            # 计算合适的字体大小
             ratio = available_width / text_width
             new_size = max(self._min_font_size, 
                           min(self._max_font_size, 
-                              int(self.font().pointSize() * ratio)))
+                              int(self._base_font_size * ratio)))
+        else:
+            new_size = self._base_font_size  # 使用基础大小
             
+        # 只有当大小改变时才更新字体
+        if new_size != self.font().pointSize():
             font = self.font()
             font.setPointSize(new_size)
             self.setFont(font)
+
 
 class AutoFontSizeComboBox(QComboBox):
     def __init__(self, parent=None):
@@ -539,6 +557,7 @@ class SignalUnitConverter:
     功能:
     - 频率单位转换 (Hz, kHz, MHz, GHz)
     - 功率单位转换 (dBm, mW, W, dBW, µW, nW)
+    - 电场强度单位转换 (V/m, mV/m, µV/m, dBμV/m)
     - 安全数值转换和范围检查
     - 输入验证和异常处理
     """
@@ -557,12 +576,11 @@ class SignalUnitConverter:
         'mW': 'mW',
         'W': 'W',
         'dBW': 'dBW',
-        'µW': 'µW',
-        'uW': 'µW',  # 兼容uW和µW
+        'uW': 'uW',  # 兼容uW和µW
         'nW': 'nW',
     }
 
-    # 新增电场强度单位转换系数
+    # 电场强度单位转换系数
     E_FIELD_UNITS = {
         'V/m': 'V/m',
         'mV/m': 'mV/m',
@@ -580,7 +598,7 @@ class SignalUnitConverter:
         self.default_freq_unit = 'GHz'
         # 默认功率单位
         self.default_power_unit = 'dBm'
-        # 新增电场强度默认单位
+        # 默认电场强度单位
         self.default_efield_unit = 'dBμV/m'
         
         # 功率单位颜色映射 (用于UI显示)
@@ -593,7 +611,7 @@ class SignalUnitConverter:
             'nW': '#16a085'
         }
 
-        self.efield_unit_colors ={
+        self.efield_unit_colors = {
             'V/m': '#9b59b6',
             'mV/m': '#3498db',
             'µV/m': '#2ecc71',
@@ -691,7 +709,8 @@ class SignalUnitConverter:
         elif from_unit == 'W':
             mW_value = power_value * 1000
         elif from_unit == 'dBW':
-            mW_value = 10 ** ((power_value + 30) / 10)
+            # 修正：dBW 到 mW 的转换公式
+            mW_value = 10 ** ((power_value + 30) / 10)  # dBW + 30 = dBm
         elif from_unit == 'µW':
             mW_value = power_value / 1000
         elif from_unit == 'nW':
@@ -711,6 +730,7 @@ class SignalUnitConverter:
             converted = mW_value / 1000
         elif to_unit == 'dBW':
             try:
+                # 修正：mW 到 dBW 的转换公式
                 converted = 10 * math.log10(mW_value / 1000) if mW_value > 0 else -math.inf
             except (ValueError, ZeroDivisionError):
                 converted = -math.inf
@@ -790,7 +810,10 @@ class SignalUnitConverter:
         
         if unit:
             converted, unit = self.convert_power(power_value, 'dBm', unit)
-            return f"{converted:.2f} {unit}"
+            # 特殊处理对数单位的小数位数
+            if unit in ['dBm', 'dBW']:
+                return f"{converted:.2f} {unit}"
+            return f"{converted:.6f} {unit}"
         
         # 自动选择最佳单位
         if isinstance(power_value, str) and 'dB' in power_value:
@@ -798,7 +821,13 @@ class SignalUnitConverter:
             return f"{power_value:.2f} dBm" if 'dBm' in power_value else f"{power_value:.2f} dBW"
         
         # 尝试转换为mW以确定最佳单位
-        mW_value = 10 ** (power_value / 10) if power_value > -1000 else 0
+        try:
+            if power_value <= -1000:  # 极小值处理
+                mW_value = 0
+            else:
+                mW_value = 10 ** (power_value / 10) if power_value > -1000 else 0
+        except:
+            mW_value = 0
         
         if mW_value >= 1000:
             converted = mW_value / 1000
@@ -813,7 +842,15 @@ class SignalUnitConverter:
             converted = mW_value * 1e6
             unit = 'nW'
             
-        return f"{converted:.2f} {unit}"
+        # 根据数值大小调整小数位数
+        if converted > 1000:
+            return f"{converted:.2f} {unit}"
+        elif converted > 100:
+            return f"{converted:.3f} {unit}"
+        elif converted > 10:
+            return f"{converted:.4f} {unit}"
+        else:
+            return f"{converted:.6f} {unit}"
 
     def validate_frequency(self, freq_str: str) -> Tuple[bool, float, str]:
         """
@@ -855,7 +892,7 @@ class SignalUnitConverter:
             unit = ''.join(unit_part).strip()
             unit = self._normalize_freq_unit(unit) if unit else self.default_freq_unit
             
-            # 检查值范围
+            # 放宽值范围检查
             if not (0 <= value < 1e20):
                 return (False, value, unit)
                 
@@ -917,11 +954,11 @@ class SignalUnitConverter:
             else:
                 unit = self._normalize_power_unit(unit) if unit else self.default_power_unit
             
-            # 检查值范围 (dBm: -100到100, 线性功率: 0到1e6)
+            # 放宽值范围检查
             if unit in ('dBm', 'dBW'):
-                valid = -100 <= value <= 100
+                valid = -300 <= value <= 300  # 扩展范围
             else:
-                valid = 0 <= value <= 1e6
+                valid = 0 <= value <= 1e12   # 扩展范围
                 
             return (valid, value, unit)
         except (ValueError, TypeError):
@@ -971,14 +1008,16 @@ class SignalUnitConverter:
         return self.power_unit_colors.get(norm_unit, '#0078d7')
     
     def convert_efield(self, value: Union[str, float, int], 
-                      from_unit: str, to_unit: str) -> Tuple[float, str]:
+                    from_unit: str, to_unit: str,
+                    distance: float = 1.0) -> Tuple[float, str]:
         """
-        电场强度单位转换
+        电场强度单位转换（支持距离参数）
         
         参数:
             value: 输入场强值
-            from_unit: 原单位 (V/m, mV/m, µV/m, dBμV/m)
-            to_unit: 目标单位 (V/m, mV/m, µV/m, dBμV/m)
+            from_unit: 原单位 (V/m, mV/m, µV/m, dBμV/m, dBm)
+            to_unit: 目标单位 (V/m, mV/m, µV/m, dBμV/m, dBm)
+            distance: 测量距离 (米), 默认为1米
             
         返回:
             (转换后的值, 规范化后的单位)
@@ -994,17 +1033,44 @@ class SignalUnitConverter:
         if from_unit == to_unit:
             return (efield_value, to_unit)
         
+        # 处理功率单位 (dBm/mW等) → 电场强度的转换
+        if from_unit in self.POWER_UNITS:
+            # 先将功率转换为dBm
+            power_dbm, _ = self.convert_power(efield_value, from_unit, 'dBm')
+            # 然后通过距离计算电场强度
+            efield_v_m = self.dbm_to_efield(power_dbm, distance)
+            # 最后转换到目标单位
+            print()
+            return self._convert_efield_inner(efield_v_m, 'V/m', to_unit)
+        
+        # 处理电场强度 → 功率单位的转换
+        if to_unit in self.POWER_UNITS:
+            # 先统一转换为V/m
+            efield_v_m, _ = self._convert_efield_inner(efield_value, from_unit, 'V/m')
+            # 然后通过距离计算功率
+            power_dbm = self.efield_to_dbm(efield_v_m, distance)
+            # 最后转换到目标功率单位
+            return self.convert_power(power_dbm, 'dBm', to_unit)
+        
+        # 纯电场强度单位间的转换
+        return self._convert_efield_inner(efield_value, from_unit, to_unit)
+
+    def _convert_efield_inner(self, value: float,
+                            from_unit: str, to_unit: str) -> Tuple[float, str]:
+        """
+        内部方法：处理纯电场强度单位间的转换
+        """
         # 全部转换为µV/m作为中间单位
         if from_unit == 'V/m':
-            uV_m_value = efield_value * 1e6
+            uV_m_value = value * 1e6
         elif from_unit == 'mV/m':
-            uV_m_value = efield_value * 1e3
+            uV_m_value = value * 1e3
         elif from_unit == 'µV/m':
-            uV_m_value = efield_value
+            uV_m_value = value
         elif from_unit == 'dBμV/m':
-            uV_m_value = 10 ** (efield_value / 20)  # 因为 E (dBμV/m) = 20*log10(E in µV/m)
+            uV_m_value = 10 ** (value / 20)
         else:
-            return (efield_value, from_unit)  # 无效单位
+            return (value, from_unit)
         
         # 从µV/m转换为目标单位
         if to_unit == 'V/m':
@@ -1019,14 +1085,11 @@ class SignalUnitConverter:
             except (ValueError, ZeroDivisionError):
                 converted = -math.inf
         else:
-            return (efield_value, from_unit)  # 无效单位
+            return (value, from_unit)
         
-        # 处理极小值
-        if abs(converted) < 1e-12 and converted != 0:
-            converted = 0.0
-            
         return (converted, to_unit)
-    
+
+
     def efield_to_power_density(self, efield: Union[str, float, int], 
                                efield_unit: str = 'V/m') -> Tuple[float, str]:
         """
@@ -1046,6 +1109,7 @@ class SignalUnitConverter:
         power_density = (e_v_m ** 2) / self.Z0
         
         return (power_density, 'W/m²')
+    
     def power_density_to_efield(self, power_density: Union[str, float, int], 
                               power_unit: str = 'W/m²') -> Tuple[float, str]:
         """
@@ -1059,15 +1123,19 @@ class SignalUnitConverter:
             (电场强度值, 'V/m')
         """
         # 转换为W/m²
+        s_w_m2 = self.safe_float_convert(power_density)
+        
+        # 处理不同单位
         if power_unit == 'mW/m²':
-            s_w_m2 = self.safe_float_convert(power_density) * 1e-3
+            s_w_m2 *= 1e-3
         elif power_unit == 'µW/m²':
-            s_w_m2 = self.safe_float_convert(power_density) * 1e-6
-        else:  # 默认为 W/m²
-            s_w_m2 = self.safe_float_convert(power_density)
+            s_w_m2 *= 1e-6
         
         # 计算电场强度 E = sqrt(S * Z0)
-        efield = math.sqrt(s_w_m2 * self.Z0) if s_w_m2 > 0 else 0.0
+        if s_w_m2 > 0:
+            efield = math.sqrt(s_w_m2 * self.Z0)
+        else:
+            efield = 0.0
         
         return (efield, 'V/m')
     
@@ -1088,7 +1156,10 @@ class SignalUnitConverter:
         
         if unit:
             converted, unit = self.convert_efield(efield_value, 'V/m', unit)
-            return f"{converted:.2f} {unit}"
+            # 特殊处理对数单位的小数位数
+            if unit == 'dBμV/m':
+                return f"{converted:.2f} {unit}"
+            return f"{converted:.6f} {unit}"
         
         # 自动选择最佳单位
         abs_value = abs(efield_value)
@@ -1102,15 +1173,15 @@ class SignalUnitConverter:
             converted = efield_value * 1e6
             unit = 'µV/m'
             
-        # 确定小数位数
-        if unit == 'V/m':
-            decimal_places = 2 if abs(converted) < 10 else 1
-        elif unit == 'mV/m':
-            decimal_places = 1
+        # 根据数值大小调整小数位数
+        if converted > 1000:
+            return f"{converted:.2f} {unit}"
+        elif converted > 100:
+            return f"{converted:.3f} {unit}"
+        elif converted > 10:
+            return f"{converted:.4f} {unit}"
         else:
-            decimal_places = 0
-            
-        return f"{converted:.{decimal_places}f} {unit}"
+            return f"{converted:.6f} {unit}"
     
     def validate_efield(self, efield_str: str) -> Tuple[bool, float, str]:
         """
@@ -1164,7 +1235,7 @@ class SignalUnitConverter:
             else:
                 unit = self._normalize_efield_unit(unit) if unit else self.default_efield_unit
             
-            # 检查值范围
+            # 放宽值范围检查
             if unit == 'V/m':
                 valid = 0 <= value <= 1e6
             elif unit == 'mV/m':
@@ -1192,7 +1263,7 @@ class SignalUnitConverter:
             return 'mV/m'
         elif unit.startswith('µv/m') or unit.startswith('uv/m'):
             return 'µV/m'
-        elif unit.startswith('dbμv/m') or unit.startswith('dbuv/m'):
+        elif unit.startswith('dbμv/m') or unit.startswith('dbuv/m') or unit.startswith('dbu'):
             return 'dBμV/m'
         else:
             return self.default_efield_unit
@@ -1202,6 +1273,84 @@ class SignalUnitConverter:
         norm_unit = self._normalize_efield_unit(unit)
         return self.efield_unit_colors.get(norm_unit, '#9b59b6')
 
+    def dbm_to_efield(self, dbm: float, distance: float = 1.0, antenna_gain: float = 1.0) -> float:
+        """
+        将dBm转换为电场强度 (V/m)
+        
+        参数:
+            dbm: 发射功率 (dBm)
+            distance: 距离 (米), 默认为1米
+            antenna_gain: 天线增益 (无量纲), 默认为1 (各向同性天线)
+        
+        返回:
+            电场强度 (V/m)
+        """
+        # dBm → 功率 (W)
+        power_w = 10 ** (dbm / 10) * 1e-3
+        
+        # 功率密度 (W/m²)
+        power_density = (power_w * antenna_gain) / (4 * math.pi * distance ** 2)
+        
+        # 电场强度 (V/m)
+        efield = math.sqrt(power_density * self.Z0)
+        
+        return efield
+    
+    def efield_to_dbm(self, efield: float, distance: float = 1.0, antenna_gain: float = 1.0) -> float:
+        """
+        将电场强度 (V/m) 转换为 dBm
+        
+        参数:
+            efield: 电场强度 (V/m)
+            distance: 距离 (米), 默认为1米
+            antenna_gain: 天线增益 (无量纲), 默认为1
+        
+        返回:
+            发射功率 (dBm)
+        """
+        # 功率密度 (W/m²)
+        power_density = (efield ** 2) / self.Z0
+        
+        # 功率 (W)
+        power_w = power_density * (4 * math.pi * distance ** 2) / antenna_gain
+        
+        # W → dBm
+        dbm = 10 * math.log10(power_w * 1e3) if power_w > 0 else -math.inf
+        
+        return dbm
+    def convert_power_with_distance(self, value: Union[str, float, int], 
+                                  from_unit: str, to_unit: str,
+                                  distance: float = 1.0) -> Tuple[float, str]:
+        """
+        支持距离参数的功率单位转换
+        
+        参数:
+            value: 输入值
+            from_unit: 原单位
+            to_unit: 目标单位
+            distance: 距离 (米)
+            
+        返回:
+            (转换后的值, 单位)
+        """
+        # 处理电场强度单位转换
+        if (from_unit in self.E_FIELD_UNITS and to_unit in self.POWER_UNITS) or \
+           (from_unit in self.POWER_UNITS and to_unit in self.E_FIELD_UNITS):
+            
+            # 功率 → 电场强度
+            if from_unit in self.POWER_UNITS:
+                power_dbm, _ = self.convert_power(value, from_unit, 'dBm')
+                efield = self.dbm_to_efield(power_dbm, distance)
+                return self.convert_efield(efield, 'V/m', to_unit)
+            
+            # 电场强度 → 功率
+            else:
+                efield_v_m, _ = self.convert_efield(value, from_unit, 'V/m')
+                dbm = self.efield_to_dbm(efield_v_m, distance)
+                return self.convert_power(dbm, 'dBm', to_unit)
+        
+        # 普通功率单位转换
+        return self.convert_power(value, from_unit, to_unit)
 
 class LogWidget(QTextEdit):
     """带等级和时间戳的日志输出控件"""
@@ -1281,7 +1430,6 @@ class StatusPanel(QWidget):
         self.src_label.setProperty("panelTitle", True)
         src_layout.addWidget(self.src_label)
 
-        
 
         self.src_grid = QGridLayout()
         self.src_grid.setSpacing(6)
@@ -1289,36 +1437,36 @@ class StatusPanel(QWidget):
 
         # 信号源频率信息
         self.src_grid.addWidget(QLabel("信号频率:"), 0, 0)
-        self.src_freq = QLabel("-")
+        self.src_freq = AutoFontSizeLabel()
         self.src_freq.setProperty("statusValue", True)
         self.src_grid.addWidget(self.src_freq, 0, 1)
 
         # 频率单位下拉框
-        self.freq_unit_combo = QComboBox()
+        self.freq_unit_combo = AutoFontSizeComboBox()
         self.freq_unit_combo.addItems(list(self.unit_converter.FREQ_UNITS.keys()))
         self.freq_unit_combo.setCurrentText(self.unit_converter.default_freq_unit)
         self.src_grid.addWidget(self.freq_unit_combo, 0, 2)
 
         # 信号源功率信息
         self.src_grid.addWidget(QLabel("信号功率:"), 1, 0)
-        self.src_raw_power = QLabel("-")
+        self.src_raw_power = AutoFontSizeLabel()
         self.src_raw_power.setProperty("statusValue", True)
         self.src_grid.addWidget(self.src_raw_power, 1, 1)
 
         # 功率单位下拉框
-        self.raw_power_unit_combo = QComboBox()
+        self.raw_power_unit_combo = AutoFontSizeComboBox()
         self.raw_power_unit_combo.addItems(list(self.unit_converter.POWER_UNITS.keys()))
         self.raw_power_unit_combo.addItems(list(self.unit_converter.E_FIELD_UNITS.keys()))
         self.raw_power_unit_combo.setCurrentText(self.unit_converter.default_power_unit)
         self.src_grid.addWidget(self.raw_power_unit_combo, 1, 2)
 
         self.src_grid.addWidget(QLabel("馈源功率:"), 2, 0)
-        self.src_power = QLabel("-")
+        self.src_power = AutoFontSizeLabel()
         self.src_power.setProperty("statusValue", True)
         self.src_grid.addWidget(self.src_power, 2, 1)
 
         # 馈源功率单位下拉框
-        self.power_unit_combo = QComboBox()
+        self.power_unit_combo = AutoFontSizeComboBox()
         self.power_unit_combo.addItems(list(self.unit_converter.POWER_UNITS.keys()))
         self.power_unit_combo.addItems(list(self.unit_converter.E_FIELD_UNITS.keys()))
         self.power_unit_combo.setCurrentText(self.unit_converter.default_power_unit)
@@ -2394,7 +2542,7 @@ class MainWindow(QMainWindow):
         self._update_status_label(self.status_panel.src_power, feed_power_text)
         
         # RF status (fixed width)
-        rf_status = src.get("rf", "-").ljust(9)
+        rf_status = src.get("rf", "-")
         self._update_status_label(
             self.status_panel.src_rf, 
             rf_status,
@@ -2435,7 +2583,7 @@ class MainWindow(QMainWindow):
     def _update_status_label(self, label, text, custom_style=None):
         """Update status label with fixed-width formatting"""
         # Ensure text is exactly 9 characters wide
-        display_text = str(text).strip()[:9].ljust(9)
+        display_text = str(text).strip()
         label.setText(display_text)
         
         # Set font to monospace for perfect alignment
@@ -2502,75 +2650,78 @@ class MainWindow(QMainWindow):
             f"background:{bg}; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
         )
 
+
     def _format_quantity(self, value, quantity_type, target_widget=None):
-        """Format numeric values with precise units (9 chars total including sign)"""
+        """Format numeric values with optimal precision for different unit types
+        - Uses scientific notation for very large/small values
+        - Maintains unit-specific formatting
+        - Handles all defined unit types (frequency, power, E-field)
+        - Special formatting for dB units
+        """
+        
         if value == "-" or value is None:
-            return "-".ljust(9)  # Ensure fixed width
+            return "-"
         
         try:
+            # Convert to float first to handle string inputs
+            num = float(str(value).strip())
+            
             if quantity_type == "frequency":
                 current_unit = self.status_panel.freq_unit_combo.currentText()
-                value = str(value).replace("Hz", "").replace("hz", "").replace(" ", "")
-                num = float(value)
-                
                 converted_value, unit = self.status_panel.unit_converter.convert_frequency(
                     num, "Hz", current_unit
                 )
                 
-                # Precision formatting for 9-character display
+                # Frequency formatting rules
                 if unit == "GHz":
-                    if abs(converted_value) >= 100:
-                        return f"{converted_value:>6.3f} {unit}"  # e.g. " 123.456 GHz" (9 chars)
-                    elif abs(converted_value) >= 10:
-                        return f"{converted_value:>6.4f} {unit}"  # e.g. " 12.3456 GHz" (9 chars)
-                    else:
-                        return f"{converted_value:>6.5f} {unit}"  # e.g. " 1.23456 GHz" (9 chars)
-                
+                    if abs(converted_value) >= 1000:
+                        return f"{converted_value:.6e} {unit}".replace('e+0', 'e+')
+                    return f"{converted_value:.6f} {unit}"
                 elif unit == "MHz":
-                    return f"{int(converted_value):>7} {unit}"  # e.g. " 1234567 MHz" (9 chars)
-                
+                    return f"{converted_value:.3f} {unit}"
                 elif unit == "kHz":
-                    return f"{int(converted_value):>7} {unit}"  # e.g. " 1234567 kHz" (9 chars)
-                
+                    return f"{converted_value:.1f} {unit}"
                 else:  # Hz
-                    return f"{int(converted_value):>7} {unit}"  # e.g. " 1234567 Hz" (9 chars)
-            
+                    return f"{int(converted_value)} {unit}"
+                    
             elif quantity_type == "power":
                 if target_widget == "src_power":
                     current_unit = self.status_panel.power_unit_combo.currentText()
                 else:
                     current_unit = self.status_panel.raw_power_unit_combo.currentText()
                 
-                value = str(value).replace("dBm", "").replace("dbm", "").replace(" ", "")
-                num = float(value)
-                
-                # Handle E-field units
+                # Handle E-field units (1m distance assumed)
                 if current_unit in self.status_panel.unit_converter.E_FIELD_UNITS:
                     converted_value, unit = self.status_panel.unit_converter.power_density_to_efield(num, "dBm")
                     converted_value, unit = self.status_panel.unit_converter.convert_efield(converted_value, "V/m", current_unit)
                     
-                    # Precision formatting for E-field (9 chars)
+                    # E-field formatting
                     if unit in ["dBμV/m", "dBuV/m"]:
-                        return f"{converted_value:>6.2f}{unit}"  # e.g. " 123.45dBμV/m" (9 chars)
-                    else:
-                        return f"{converted_value:>6.3f} {unit}"  # e.g. " 1.234 V/m" (9 chars)
-                else:
+                        return f"{converted_value:.2f}{unit}"
+                    elif unit == "V/m":
+                        return f"{converted_value:.6f} {unit}"
+                    else:  # mV/m, µV/m
+                        return f"{converted_value:.3f} {unit}"
+                        
+                else:  # Regular power units
                     converted_value, unit = self.status_panel.unit_converter.convert_power(num, "dBm", current_unit)
                     
-                    # Precision formatting for power (9 chars)
-                    if unit == "dBm":
-                        return f"{converted_value:>6.3f} {unit}"  # e.g. "-123.456dBm" (9 chars)
+                    # Power unit formatting
+                    if unit in ["dBm", "dBW"]:
+                        return f"{converted_value:.2f} {unit}"
                     elif unit == "W":
-                        return f"{converted_value:>6.3g} {unit}"  # Scientific if needed
-                    else:
-                        return f"{converted_value:>6.4f}{unit}"  # e.g. "1.2345mW" (9 chars)
-        
-        except ValueError:
-            return str(value)[:9].ljust(9)  # Truncate to 9 chars if error
-        
-        return str(value)[:9].ljust(9)  # Fallback
+                        if abs(converted_value) >= 1000 or abs(converted_value) < 0.001:
+                            return f"{converted_value:.6e} {unit}".replace('e+0', 'e+')
+                        return f"{converted_value:.6f} {unit}"
+                    else:  # mW, µW, nW
+                        if abs(converted_value) >= 1e6 or abs(converted_value) < 0.001:
+                            return f"{converted_value:.6e}{unit}".replace('e+0', 'e+')
+                        return f"{converted_value:.3f}{unit}"
 
-
+        except (ValueError, TypeError):
+            return str(value)
+        
+        return str(value)
 
 
 
