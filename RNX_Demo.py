@@ -1089,7 +1089,6 @@ class SignalUnitConverter:
         
         return (converted, to_unit)
 
-
     def efield_to_power_density(self, efield: Union[str, float, int], 
                                efield_unit: str = 'V/m') -> Tuple[float, str]:
         """
@@ -1865,9 +1864,17 @@ class MainWindow(QMainWindow):
             self.status_thread.start()
             # 连接成功后自动查询一次链路状态
             self.query_link_cmd()
+            
+            # 添加连接成功的视觉反馈
+            self.eth_ip_input.setStyleSheet("border: 2px solid #4CAF50;")  # 绿色边框表示连接成功
+            self.eth_port_input.setStyleSheet("border: 2px solid #4CAF50;")
+            self.eth_connect_btn.setStyleSheet("background: #4CAF50; color: white;")  # 绿色按钮表示已连接
         else:
             self.log(f"连接失败: {message}", "ERROR")
-
+            # 连接失败的视觉反馈
+            self.eth_ip_input.setStyleSheet("border: 2px solid #F44336;")  # 红色边框表示连接失败
+            self.eth_port_input.setStyleSheet("border: 2px solid #F44336;")
+            self.eth_connect_btn.setStyleSheet("background: #F44336; color: white;")  # 红色按钮表示连接失败
 
     def disconnect_eth(self):
         if self.tcp_client.connected:
@@ -1879,9 +1886,15 @@ class MainWindow(QMainWindow):
                 self.status_thread.stop()
                 self.status_thread.wait()
                 self.status_thread = None
+                
+            # 添加断开连接的视觉反馈
+            self.eth_ip_input.setStyleSheet("")  # 恢复默认样式
+            self.eth_port_input.setStyleSheet("")
+            self.eth_connect_btn.setStyleSheet("")  # 恢复默认按钮样式
         else:
             self.show_status("未连接到设备。")
             self.log("未连接到设备。", "WARNING")
+
 
     def is_valid_frequency(self, freq_str):
         """验证频率值是否有效"""
