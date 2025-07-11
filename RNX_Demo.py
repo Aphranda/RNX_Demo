@@ -33,8 +33,9 @@ class StatusQueryThread(QThread):
         self.port = int(port)
         self.mutex = mutex
         self._running = True
-        self.current_operation = None  # 新增：当前操作状态
-        self.operating_axis = None    # 新增：当前操作的轴
+        self.current_operation = None
+        self.operating_axis = None
+        self.socket = None  # 添加socket实例变量
 
     def run(self):
         axes = ["X", "KU", "K", "KA", "Z"]
@@ -44,7 +45,7 @@ class StatusQueryThread(QThread):
             self.mutex.lock()
             try:
                 # 每次只查一个轴
-                axis= axes[axis_idx]
+                axis = axes[axis_idx]
                 if axis == "Z":
                     reach = "NO Pa"
                     home = self.query_status("READ:MOTion:HOME? ALL")
@@ -53,7 +54,6 @@ class StatusQueryThread(QThread):
                     reach = self.query_status(f"READ:MOTion:FEED? {axis}")
                     home = self.query_status(f"READ:MOTion:HOME? {axis}")
                     speed = self.query_status(f"READ:MOTion:SPEED? {axis}")
-
 
                 status["motion"][axis] = {
                     "reach": reach,
@@ -70,8 +70,11 @@ class StatusQueryThread(QThread):
                 elif axis_idx == 2:
                     rf = self.query_status("READ:SOURce:OUTPut?")
                     status["src"]["rf"] = rf
+            except Exception as e:
+                self.log(f"查询状态出错: {str(e)}", "ERROR")
             finally:
                 self.mutex.unlock()
+                
             self.status_signal.emit(status)
             axis_idx = (axis_idx + 1) % len(axes)
             # 细粒度sleep，保证stop及时
@@ -80,18 +83,8 @@ class StatusQueryThread(QThread):
                     break
                 time.sleep(0.05)
 
-
     def query_status(self, cmd, max_retries=3, base_timeout=1.0):
-        """
-        带超时重发机制的查询方法
-        参数:
-            cmd: 要发送的命令字符串
-            max_retries: 最大重试次数 (默认3次)
-            base_timeout: 基础超时时间(秒)，会随重试次数增加 (默认1秒)
-        返回:
-            成功: 返回设备响应字符串
-            失败: 返回错误信息字符串
-        """
+        """带超时重发机制的查询方法"""
         retry_count = 0
         last_exception = None
         
@@ -99,11 +92,12 @@ class StatusQueryThread(QThread):
             sock = None
             try:
                 # 动态计算当前超时时间 (指数退避算法)
-                current_timeout = min(base_timeout * (2 ** retry_count), 5.0)  # 最大不超过5秒
+                current_timeout = min(base_timeout * (2 ** retry_count), 5.0)
                 
                 # 建立连接并设置超时
                 sock = socket.create_connection((self.ip, self.port), timeout=current_timeout)
                 sock.settimeout(current_timeout)
+                self.socket = sock  # 保存socket引用
                 
                 # 发送命令
                 sock.sendall((cmd + '\n').encode('utf-8'))
@@ -111,7 +105,7 @@ class StatusQueryThread(QThread):
                 # 接收数据（支持分片接收）
                 data = b''
                 start_time = time.time()
-                while True:
+                while self._running:  # 添加运行状态检查
                     try:
                         # 检查是否超时
                         if time.time() - start_time > current_timeout:
@@ -163,6 +157,7 @@ class StatusQueryThread(QThread):
                         sock.close()
                     except:
                         pass
+                self.socket = None  # 清除socket引用
         
         # 所有重试失败后的处理
         error_msg = f"命令 '{cmd}' 执行失败(重试{retry_count}次)"
@@ -171,9 +166,18 @@ class StatusQueryThread(QThread):
         
         return error_msg
 
-
     def stop(self):
+        """安全停止线程"""
         self._running = False
+        if self.socket:  # 如果socket存在，则关闭它以中断阻塞的recv
+            try:
+                self.socket.shutdown(socket.SHUT_RDWR)
+                self.socket.close()
+            except:
+                pass
+            self.socket = None
+        self.wait(5000)  # 等待线程结束，最多5秒
+
 
 class TcpClient:
     """带超时重发机制的TCP客户端"""
