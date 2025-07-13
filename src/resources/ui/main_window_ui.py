@@ -177,8 +177,8 @@ class MainWindowUI(QMainWindow):
         right_panel.addWidget(src_group)
         
         # 运动控制
-        motion_group = QGroupBox("运动控制")
-        motion_layout = QGridLayout(motion_group)
+        self.motion_group = QGroupBox("运动控制")
+        motion_layout = QGridLayout(self.motion_group)
         motion_layout.addWidget(QLabel("复位:"), 0, 0)
         motion_layout.addWidget(self.home_combo, 0, 1)
         motion_layout.addWidget(self.home_btn, 0, 2)
@@ -192,7 +192,7 @@ class MainWindowUI(QMainWindow):
         motion_layout.addWidget(self.speed_combo, 2, 2)
         motion_layout.addWidget(self.speed_btn, 2, 3)
         motion_layout.addWidget(self.speed_query_btn, 2, 4)
-        right_panel.addWidget(motion_group)
+        right_panel.addWidget(self.motion_group)
         
         main_layout.addLayout(right_panel, stretch=3)
         

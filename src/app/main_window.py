@@ -105,95 +105,89 @@ class MainWindow(MainWindowUI):
     
 
 
-    # --- ETH连接 ---
+    # ==== 网络连接方法 ====
     def connect_eth(self):
-        ip = self.eth_ip_input.text().strip()
-        port = self.eth_port_input.text().strip()
-        # 如果未输入，则用PlaceholderText
-        if not ip:
-            ip = self.eth_ip_input.placeholderText()
-        if not port:
-            port = self.eth_port_input.placeholderText()
+        ip = self.eth_ip_input.text().strip() or self.eth_ip_input.placeholderText()
+        port = self.eth_port_input.text().strip() or self.eth_port_input.placeholderText()
+        
         self.show_status(f"正在连接：IP={ip}，Port={port}")
         self.log(f"尝试连接到 IP={ip}，Port={port}", "INFO")
+        
         success, message = self.tcp_client.connect(ip, port)
         self.show_status(message)
+        
         if success:
             self.log(f"已连接到 {ip}:{port}", "SUCCESS")
-            # 启动状态线程
-            if self.status_thread:
-                self.status_thread.stop()
-            self.status_thread = StatusQueryThread(ip, port, self.comm_mutex)
-            self.status_thread.status_signal.connect(self.update_status_panel)
-            self.status_thread.start()
-            # 连接成功后自动查询一次链路状态
+            self._start_status_thread(ip, port)
             self.query_link_cmd()
-
-            # 连接成功后，自动进入频率联动模式
             self.freq_feed_link_check.setChecked(True)
-            
-            # 添加连接成功的视觉反馈
-            self.eth_ip_input.setStyleSheet("border: 2px solid #4CAF50;")  # 绿色边框表示连接成功
-            self.eth_port_input.setStyleSheet("border: 2px solid #4CAF50;")
-            self.eth_connect_btn.setStyleSheet("background: #4CAF50; color: white;")  # 绿色按钮表示已连接
+            self._update_connection_ui(True)
         else:
             self.log(f"连接失败: {message}", "ERROR")
-            # 连接失败的视觉反馈
-            self.eth_ip_input.setStyleSheet("border: 2px solid #F44336;")  # 红色边框表示连接失败
-            self.eth_port_input.setStyleSheet("border: 2px solid #F44336;")
-            self.eth_connect_btn.setStyleSheet("background: #F44336; color: white;")  # 红色按钮表示连接失败
+            self._update_connection_ui(False)
 
     def disconnect_eth(self):
         if self.tcp_client.connected:
             self.tcp_client.close()
             self.show_status("已断开连接。")
             self.log("已断开连接。", "INFO")
-            # 停止状态线程
-            if self.status_thread:
-                self.status_thread.stop()
-                self.status_thread.wait()
-                self.status_thread = None
-                
-            # 添加断开连接的视觉反馈
-            self.eth_ip_input.setStyleSheet("")  # 恢复默认样式
-            self.eth_port_input.setStyleSheet("")
-            self.eth_connect_btn.setStyleSheet("")  # 恢复默认按钮样式
+            self._stop_status_thread()
+            self._update_connection_ui(False)
         else:
             self.show_status("未连接到设备。")
             self.log("未连接到设备。", "WARNING")
 
+    def _start_status_thread(self, ip, port):
+        """启动状态查询线程"""
+        if self.status_thread:
+            self.status_thread.stop()
+        self.status_thread = StatusQueryThread(ip, port, self.comm_mutex)
+        self.status_thread.status_signal.connect(self.update_status_panel)
+        self.status_thread.start()
 
+    def _stop_status_thread(self):
+        """停止状态查询线程"""
+        if self.status_thread:
+            self.status_thread.stop()
+            self.status_thread.wait()
+            self.status_thread = None
+
+    def _update_connection_ui(self, connected):
+        """更新连接状态的UI"""
+        if connected:
+            self.eth_ip_input.setStyleSheet("border: 2px solid #4CAF50;")
+            self.eth_port_input.setStyleSheet("border: 2px solid #4CAF50;")
+            self.eth_connect_btn.setStyleSheet("background: #4CAF50; color: white;")
+        else:
+            self.eth_ip_input.setStyleSheet("")
+            self.eth_port_input.setStyleSheet("")
+            self.eth_connect_btn.setStyleSheet("")
+
+
+    # ==== 频率联动方法 ====
     def _on_freq_link_state_changed(self, state):
         """处理频率联动复选框状态变化"""
         if state == Qt.Checked and not self._is_freq_link_connected:
-            # 启用联动
             self.link_mode_combo.currentTextChanged.connect(self._update_feed_for_freq)
             self._is_freq_link_connected = True
             self.log("频率与馈源联动已启用", "WARNING")
-            
-            # 禁用运动控制区域
             self.motion_group.setTitle("运动控制 (频率联动模式下禁用)")
-            self.motion_group.setEnabled(False)  # 这会自动禁用所有子控件
-            
+            self.motion_group.setEnabled(False)
         elif state != Qt.Checked and self._is_freq_link_connected:
-            # 禁用联动
             try:
                 self.link_mode_combo.currentTextChanged.disconnect(self._update_feed_for_freq)
             except TypeError:
                 pass
             self._is_freq_link_connected = False
             self.log("频率与馈源联动已禁用", "WARNING")
-            
-            # 启用运动控制区域
             self.motion_group.setTitle("运动控制")
-            self.motion_group.setEnabled(True)  # 这会自动启用所有子控件
+            self.motion_group.setEnabled(True)
     
     def _update_feed_for_freq(self, mode):
         """根据频率更新馈源设置"""
         if not self.tcp_client.connected:
             return
         
-        # 解析频率范围
         freq_ranges = {
             "FEED_X_THETA": (8.0, 12.0),
             "FEED_X_PHI": (8.0, 12.0),

@@ -1,14 +1,20 @@
 
 from PyQt5.QtWidgets import QLabel,QSizePolicy
 from PyQt5.QtGui import QFont, QFontMetrics
+from PyQt5.QtCore import Qt
 
+from PyQt5.QtWidgets import QLabel, QSizePolicy
+from PyQt5.QtGui import QFont, QFontMetrics
+from PyQt5.QtCore import Qt
 class AutoFontSizeLabel(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._min_font_size = 6
-        self._max_font_size = 32  # 增大最大值
-        self._content_margin = 10  # 增加边距
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._max_font_size = 32
+        self._default_font_size = 24  # 默认字体大小
+        self._content_margin = 10
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.setAlignment(Qt.AlignCenter)
         self.setProperty("class", "AutoFontSizeLabel")
         
         # 初始调整
@@ -26,42 +32,64 @@ class AutoFontSizeLabel(QLabel):
         text = self.text()
         if not text or self.width() <= 10:
             return
- 
-        # 计算可用空间（考虑边距和样式表padding）
-        available_width = self.width() - 2 * self._content_margin
-        available_height = self.height() - 2 * self._content_margin
         
-        # 动态计算基准大小（基于控件高度）
-        base_size = min(self._max_font_size, 
-                      max(self._min_font_size, 
-                          int(self.height() * 0.5)))  # 高度50%作为基准
- 
-        # 二进制搜索最佳大小
-        low, high = self._min_font_size, self._max_font_size
-        best_size = base_size
+        # 计算可用宽度
+        available_width = self.width() - 2 * self._content_margin
+        
+        # 1. 首先检查默认字体大小是否适配
         font = QFont(self.font())
+        font.setPointSize(self._default_font_size)
+        metrics = QFontMetrics(font)
+        text_width = metrics.horizontalAdvance(text)
+        
+        # 如果默认字体大小完美适配
+        if text_width <= available_width:
+            # 2. 检查是否可以放大字体
+            best_size = self._find_best_font_size(
+                min_size=self._default_font_size, 
+                max_size=self._max_font_size, 
+                text=text, 
+                available_width=available_width
+            )
+        else:
+            # 3. 默认字体太大，需要缩小
+            best_size = self._find_best_font_size(
+                min_size=self._min_font_size, 
+                max_size=self._default_font_size, 
+                text=text, 
+                available_width=available_width
+            )
+        
+        # 应用最佳字体大小
+        self._apply_font_size(best_size)
+    
+    def _find_best_font_size(self, min_size, max_size, text, available_width):
+        """在指定范围内找到最佳字体大小"""
+        font = QFont(self.font())
+        low, high = min_size, max_size
+        best_size = min_size
         
         while low <= high:
             mid = (low + high) // 2
             font.setPointSize(mid)
             metrics = QFontMetrics(font)
             text_width = metrics.horizontalAdvance(text)
-            text_height = metrics.height()
             
-            if text_width <= available_width and text_height <= available_height:
-                best_size = mid
-                low = mid + 1
+            if text_width <= available_width:
+                best_size = mid  # 当前大小可用
+                low = mid + 1    # 尝试更大的字体
             else:
-                high = mid - 1
- 
-        # 应用新字体（同时设置font和样式表）
-        font.setPointSize(best_size)
+                high = mid - 1   # 尝试更小的字体
         self.setFont(font)
-        
+        font.setPointSize(best_size)
+        return best_size
+    
+    def _apply_font_size(self, size):
+        # 应用新字体
         # 关键步骤：通过样式表叠加修改（不影响其他样式）
         self.setStyleSheet(f"""
             AutoFontSizeLabel {{
-                font-size: {best_size}pt;
+                font-size: {size}pt;
                 border: 2px solid #42a5f5;
                 border-radius: 8px;
                 background: #f5faff;
