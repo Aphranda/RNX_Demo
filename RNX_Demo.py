@@ -455,45 +455,76 @@ class AutoFontSizeLabel(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._min_font_size = 6
-        self._max_font_size = 24
-        self._content_margin = 5  # 像素边距
-        self._base_font_size = self.font().pointSize()  # 存储基础字体大小
+        self._max_font_size = 72  # 增大最大值
+        self._content_margin = 10  # 增加边距
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setProperty("class", "AutoFontSizeLabel")
         
-    def resizeEvent(self, event):
+        # 初始调整
         self.adjust_font_size()
+ 
+    def resizeEvent(self, event):
         super().resizeEvent(event)
-        
+        self.adjust_font_size()
+ 
     def setText(self, text):
         super().setText(text)
         self.adjust_font_size()
-        
+ 
     def adjust_font_size(self):
         text = self.text()
-        if not text:
+        if not text or self.width() <= 10:
             return
-            
-        # 使用基础字体大小进行计算
-        base_font = QFont(self.font())
-        base_font.setPointSize(self._base_font_size)
-        base_metrics = QFontMetrics(base_font)
-        
-        text_width = base_metrics.horizontalAdvance(text)
+ 
+        # 计算可用空间（考虑边距和样式表padding）
         available_width = self.width() - 2 * self._content_margin
+        available_height = self.height() - 2 * self._content_margin
         
-        # 计算合适的字体大小
-        if text_width > available_width and available_width > 0:
-            ratio = available_width / text_width
-            new_size = max(self._min_font_size, 
-                          min(self._max_font_size, 
-                              int(self._base_font_size * ratio)))
-        else:
-            new_size = self._base_font_size  # 使用基础大小
+        # 动态计算基准大小（基于控件高度）
+        base_size = min(self._max_font_size, 
+                      max(self._min_font_size, 
+                          int(self.height() * 0.5)))  # 高度50%作为基准
+ 
+        # 二进制搜索最佳大小
+        low, high = self._min_font_size, self._max_font_size
+        best_size = base_size
+        font = QFont(self.font())
+        
+        while low <= high:
+            mid = (low + high) // 2
+            font.setPointSize(mid)
+            metrics = QFontMetrics(font)
+            text_width = metrics.horizontalAdvance(text)
+            text_height = metrics.height()
             
-        # 只有当大小改变时才更新字体
-        if new_size != self.font().pointSize():
-            font = self.font()
-            font.setPointSize(new_size)
-            self.setFont(font)
+            if text_width <= available_width and text_height <= available_height:
+                best_size = mid
+                low = mid + 1
+            else:
+                high = mid - 1
+ 
+        # 应用新字体（同时设置font和样式表）
+        font.setPointSize(best_size)
+        self.setFont(font)
+        
+        # 关键步骤：通过样式表叠加修改（不影响其他样式）
+        self.setStyleSheet(f"""
+            AutoFontSizeLabel {{
+                font-size: {best_size}pt;
+                border: 2px solid #42a5f5;
+                border-radius: 8px;
+                background: #f5faff;
+                background: {self.palette().color(self.backgroundRole()).name()};
+                padding: 4px 10px;
+                min-width: 60px;
+                min-height: 24px;
+                font-weight: bold;
+                color: #42a5f5;
+                color: {self.palette().color(self.foregroundRole()).name()};
+            }}
+        """)
+
+
 
 
 class AutoFontSizeComboBox(QComboBox):
@@ -579,19 +610,17 @@ class SignalUnitConverter:
         'dBm': 'dBm',
         'mW': 'mW',
         'W': 'W',
-        'dBW': 'dBW',
-        'uW': 'uW',  # 兼容uW和µW
+        'uW': 'uW',
         'nW': 'nW',
+        'dBW': 'dBW',
     }
 
     # 电场强度单位转换系数
     E_FIELD_UNITS = {
         'V/m': 'V/m',
         'mV/m': 'mV/m',
-        'µV/m': 'µV/m',
         'uV/m': 'µV/m',
-        'dBμV/m': 'dBμV/m',
-        'dBuV/m': 'dBμV/m',
+        'dBV/m': 'dBV/m',
     }
 
     # 自由空间波阻抗 (Ω)
@@ -603,7 +632,7 @@ class SignalUnitConverter:
         # 默认功率单位
         self.default_power_unit = 'dBm'
         # 默认电场强度单位
-        self.default_efield_unit = 'dBμV/m'
+        self.default_efield_unit = 'V/m'
         
         # 功率单位颜色映射 (用于UI显示)
         self.power_unit_colors = {
@@ -611,7 +640,7 @@ class SignalUnitConverter:
             'mW': '#228B22',
             'W': '#d32f2f',
             'dBW': '#e67e22',
-            'µW': '#8e44ad',
+            'uW': '#8e44ad',
             'nW': '#16a085'
         }
 
@@ -1482,10 +1511,11 @@ class StatusPanel(QWidget):
 
 
         # 新增：校准文件状态
-        self.src_grid.addWidget(QLabel("校准文件:"), 4, 0)
-        self.cal_file_status = QLabel("未加载")
-        self.cal_file_status.setProperty("statusValue", True)
-        self.src_grid.addWidget(self.cal_file_status, 4, 1)
+        # self.src_grid.addWidget(QLabel("校准文件:"), 4, 0)
+        self.cal_file_status = AutoFontSizeLabel("Calib Miss")
+        self.cal_file_status.setProperty("AutoScale", True)
+        self.cal_file_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.src_grid.addWidget(self.cal_file_status, 3, 2)
         
         # 新增：校准文件路径输入和加载按钮
         self.src_grid.addWidget(QLabel("校准路径:"), 5, 0)
@@ -1495,7 +1525,7 @@ class StatusPanel(QWidget):
         self.src_grid.addWidget(self.cal_file_input, 5, 1)
         
         self.load_cal_btn = QPushButton("加载")
-        self.load_cal_btn.setFixedWidth(80)  # 设置固定宽度
+        # self.load_cal_btn.setFixedWidth(80)  # 设置固定宽度
         self.src_grid.addWidget(self.load_cal_btn, 5, 2)
 
         src_layout.addStretch()
@@ -1575,6 +1605,16 @@ class MainWindow(QMainWindow):
                 min-width: 60px;
                 min-height: 24px;
                 font-size: 24px;
+                font-weight: bold;
+                color: #42a5f5;
+            }
+            QLabel[AutoScale="true"]:not(AutoFontSizeLabel) {
+                border: 2px solid #42a5f5;
+                border-radius: 8px;
+                background: #f5faff;
+                padding: 4px 10px;
+                min-width: 60px;
+                min-height: 24px;
                 font-weight: bold;
                 color: #42a5f5;
             }
@@ -2015,49 +2055,6 @@ class MainWindow(QMainWindow):
 
 
 
-    # def load_calibration_file(self):
-    #     """加载校准文件"""
-    #     from PyQt5.QtWidgets import QFileDialog
-
-    #     # 获取最近校准文件目录
-    #     cal_dir = "calibrations"  # 默认目录
-    #     if hasattr(self, 'cal_manager'):
-    #         cal_dir = self.cal_manager.base_dir
-        
-    #     # 打开文件选择对话框
-    #     file_path, _ = QFileDialog.getOpenFileName(
-    #         self, 
-    #         "选择校准文件", 
-    #         cal_dir, 
-    #         "校准文件 (*.csv);;所有文件 (*)"
-    #     )
-        
-    #     if file_path:
-    #         self.status_panel.cal_file_input.setText(file_path)
-    #         self.log(f"已选择校准文件: {file_path}", "INFO")
-            
-    #         # 验证文件
-    #         if not hasattr(self, 'cal_manager'):
-    #             self.cal_manager = CalibrationFileManager(log_callback=self.log)
-                
-    #         if self.cal_manager.validate_calibration_file(file_path):
-    #             self.status_panel.cal_file_status.setText("已加载")
-    #             self.status_panel.cal_file_status.setStyleSheet(
-    #                 "background:#b6f5c6; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
-    #             )
-    #             self.show_status(f"校准文件有效: {os.path.basename(file_path)}")
-    #             self.log("校准文件验证通过", "SUCCESS")
-                
-    #             # 这里可以添加实际加载校准数据的逻辑
-    #             # 例如: self.load_calibration_data(file_path)
-    #         else:
-    #             self.status_panel.cal_file_status.setText("无效")
-    #             self.status_panel.cal_file_status.setStyleSheet(
-    #                 "background:#ffcdd2; color:#d32f2f; border:2px solid #0078d7; border-radius:8px;"
-    #             )
-    #             self.show_status("校准文件无效")
-    #             self.log("校准文件验证失败", "ERROR")
-
     def load_calibration_file(self, filepath: str):
         """加载校准文件"""
         from PyQt5.QtWidgets import QFileDialog
@@ -2102,16 +2099,16 @@ class MainWindow(QMainWindow):
             if result:
                 self.calibration_data = result['data']
                 self.compensation_enabled = True
-                self.status_panel.cal_file_status.setText("已加载")
+                self.status_panel.cal_file_status.setText("Calib Load")
                 self.status_panel.cal_file_status.setStyleSheet(
-                    "background:#b6f5c6; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
+                    "background:#b6f5c6; color:#0078d7;"
                 )
                 self.log("校准文件加载成功，补偿功能已启用", "SUCCESS")
             else:
                 self.compensation_enabled = False
-                self.status_panel.cal_file_status.setText("无效")
+                self.status_panel.cal_file_status.setText("Calib Invalid")
                 self.status_panel.cal_file_status.setStyleSheet(
-                    "background:#ffcdd2; color:#d32f2f; border:2px solid #0078d7; border-radius:8px;"
+                    "background:#ffcdd2; color:#d32f2f;"
                 )
                 self.log("校准文件加载失败", "ERROR")
 
@@ -2740,8 +2737,6 @@ class MainWindow(QMainWindow):
         
         return str(value)
 
-
-
 class CalibrationFileManager:
     """
     校准文件全生命周期管理类
@@ -3100,6 +3095,11 @@ class CalibrationFileManager:
 
     def _load_csv_file(self, csv_path: str) -> Optional[Dict]:
         """加载CSV格式校准文件"""
+        # 先验证文件有效性
+        if not self._validate_csv_file(csv_path):
+            self.log(f"CSV文件验证失败: {csv_path}", "ERROR")
+            return None
+
         try:
             with open(csv_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
@@ -3132,22 +3132,43 @@ class CalibrationFileManager:
                 
                 parts = line.strip().split(',')
                 if len(parts) != 9:
+                    self.log(f"数据行格式错误，应有9列，实际{len(parts)}列: {line.strip()}", "WARNING")
                     continue
                 
                 try:
+                    freq = float(parts[0])
+                    # 验证频率值范围 (假设在0.1-100 GHz之间)
+                    if not (0.1 <= freq <= 100.0):
+                        self.log(f"频率值{freq}GHz超出有效范围(0.1-100GHz)", "WARNING")
+                        continue
+                    
+                    # 验证补偿值范围 (假设在-100到100 dB之间)
+                    compensation_values = [float(x) for x in parts[1:9]]
+                    if any(not (-100 <= val <= 100) for val in compensation_values):
+                        self.log(f"补偿值超出有效范围(-100-100dB): {line.strip()}", "WARNING")
+                        continue
+                    
                     data_points.append({
-                        'freq': float(parts[0]),
-                        'x_theta': float(parts[1]),
-                        'x_phi': float(parts[2]),
-                        'ku_theta': float(parts[3]),
-                        'ku_phi': float(parts[4]),
-                        'k_theta': float(parts[5]),
-                        'k_phi': float(parts[6]),
-                        'ka_theta': float(parts[7]),
-                        'ka_phi': float(parts[8])
+                        'freq': freq,
+                        'x_theta': compensation_values[0],
+                        'x_phi': compensation_values[1],
+                        'ku_theta': compensation_values[2],
+                        'ku_phi': compensation_values[3],
+                        'k_theta': compensation_values[4],
+                        'k_phi': compensation_values[5],
+                        'ka_theta': compensation_values[6],
+                        'ka_phi': compensation_values[7]
                     })
-                except ValueError:
+                except ValueError as e:
+                    self.log(f"数据行解析失败: {line.strip()} - {str(e)}", "WARNING")
                     continue
+            
+            # 检查数据点数是否匹配元数据
+            if 'points' in meta and len(data_points) != meta['points']:
+                self.log(
+                    f"数据点数不匹配: 元数据声明{meta['points']}点, 实际{len(data_points)}点",
+                    "WARNING"
+                )
             
             return {
                 'meta': meta,
@@ -3156,6 +3177,7 @@ class CalibrationFileManager:
         except Exception as e:
             self.log(f"读取CSV文件失败: {str(e)}", "ERROR")
             return None
+
 
     def _calculate_file_hash(self) -> str:
         """计算文件MD5校验值"""
@@ -3206,23 +3228,6 @@ class CalibrationFileManager:
             self.log(f"备份失败: {str(e)}", "ERROR")
             return False
 
-    def validate_calibration_file(self, filepath: str) -> bool:
-        """
-        验证现有校准文件完整性
-        
-        :param filepath: 校准文件路径
-        :return: 文件是否有效
-        """
-        if not os.path.exists(filepath):
-            self.log(f"文件不存在: {filepath}", "ERROR")
-            return False
-        
-        # 根据文件扩展名选择验证方式
-        if filepath.lower().endswith('.bin'):
-            return self._validate_bin_file(filepath)
-        else:
-            return self._validate_csv_file(filepath)
-
     def _validate_bin_file(self, filepath: str) -> bool:
         """验证BIN格式校准文件"""
         try:
@@ -3269,23 +3274,100 @@ class CalibrationFileManager:
                 self.log("无效的文件头", "WARNING")
                 return False
                 
-            # 提取元数据
-            header_points = None
-            for line in lines:
-                if line.startswith("!  Points:"):
-                    header_points = int(line.split(":")[1].strip())
-                    break
-                    
-            if header_points is None:
-                self.log("缺少点数信息", "WARNING")
+            # 定义必需的头字段及其验证函数
+            REQUIRED_HEADERS = {
+                "!Created:": lambda x: bool(x.strip()),
+                "!Operator:": lambda x: bool(x.strip()),
+                "!  Signal_Generator:": lambda x: "_SN:" in x,
+                "!  Spectrum_Analyzer:": lambda x: "_SN:" in x,
+                "!  Antenna:": lambda x: "_SN:" in x,
+                "!Environment:": lambda x: "C, " in x and "%RH" in x,
+                "!  Start:": lambda x: x.strip().endswith("GHz"),
+                "!  Stop:": lambda x: x.strip().endswith("GHz"),
+                "!  Step:": lambda x: x.strip().endswith("GHz"),
+                "!  Points:": lambda x: x.strip().isdigit(),
+                "!Data Columns:": lambda x: True  # 只需存在即可
+            }
+            
+            # 检查所有必需字段是否存在且有效
+            missing_or_invalid = []
+            header_lines = [line.strip() for line in lines if line.startswith("!")]
+            
+            for header, validator in REQUIRED_HEADERS.items():
+                found = False
+                for line in header_lines:
+                    if line.startswith(header):
+                        value = line[len(header):].strip()
+                        if not validator(value):
+                            missing_or_invalid.append(f"无效值 '{value}' 对于 {header}")
+                        found = True
+                        break
+                if not found:
+                    missing_or_invalid.append(f"缺少必需字段 {header}")
+            
+            if missing_or_invalid:
+                self.log("文件头验证失败:\n" + "\n".join(missing_or_invalid), "WARNING")
                 return False
-                
-            # 统计数据行数
-            data_lines = sum(1 for line in lines if not line.startswith("!") and line.strip())
-            if data_lines - 1 != header_points:  # 减去标题行
-                self.log(f"数据点数不匹配: 预期{header_points}, 实际{data_lines-1}", "WARNING")
+            
+            # 提取关键元数据
+            meta = {}
+            for line in header_lines:
+                if line.startswith("!  Start:"):
+                    meta['start_ghz'] = float(line.split(":")[1].strip().split()[0])
+                elif line.startswith("!  Stop:"):
+                    meta['stop_ghz'] = float(line.split(":")[1].strip().split()[0])
+                elif line.startswith("!  Step:"):
+                    meta['step_ghz'] = float(line.split(":")[1].strip().split()[0])
+                elif line.startswith("!  Points:"):
+                    meta['points'] = int(line.split(":")[1].strip())
+            print(meta)
+            # 计算预期的点数
+            try:
+                calculated_points = int(round((meta['stop_ghz'] - meta['start_ghz']) / meta['step_ghz'])) + 1
+                if meta['points'] != calculated_points:
+                    self.log(
+                        f"点数不一致: 元数据声明{meta['points']}点, "
+                        f"但根据范围计算应有{calculated_points}点 ({(meta['stop_ghz']-meta['start_ghz'])/meta['step_ghz']})", 
+                        "WARNING"
+                    )
+                    return False
+            except ZeroDivisionError:
+                self.log("步进值不能为0", "ERROR")
                 return False
-                
+            
+            # 检查数据部分
+            data_lines = [line for line in lines if not line.startswith("!") and line.strip()]
+            
+            # 验证标题行
+            if not data_lines or not data_lines[0].startswith("Frequency(GHz),"):
+                self.log("缺少或无效的数据标题行", "WARNING")
+                return False
+            
+            # 验证数据行数 (减去标题行)
+            if len(data_lines) - 1 != meta['points']:
+                self.log(
+                    f"数据点数不匹配: 预期{meta['points']}点, 实际{len(data_lines)-1}点", 
+                    "WARNING"
+                )
+                return False
+            
+            # 验证数据行格式
+            for i, line in enumerate(data_lines[1:]):  # 跳过标题行
+                parts = line.strip().split(',')
+                if len(parts) != 9:
+                    self.log(f"第{i+2}行数据格式错误: 应有9列, 实际{len(parts)}列", "WARNING")
+                    return False
+                try:
+                    freq = float(parts[0])
+                    if not (meta['start_ghz'] <= freq <= meta['stop_ghz']):
+                        self.log(f"第{i+2}行频率{freq}GHz超出范围({meta['start_ghz']}-{meta['stop_ghz']}GHz)", "WARNING")
+                        return False
+                    # 验证所有数据列都是数字
+                    [float(x) for x in parts[1:]]
+                except ValueError:
+                    self.log(f"第{i+2}行包含非数字数据", "WARNING")
+                    return False
+            
             # 检查结束标记和校验值
             if not any(line.startswith("!EndOfData:") for line in lines[-3:]):
                 self.log("缺少结束标记", "WARNING")
@@ -3300,7 +3382,10 @@ class CalibrationFileManager:
         except Exception as e:
             self.log(f"验证CSV文件失败: {str(e)}", "ERROR")
             return False
-        
+
+
+
+
     def print_bin_file_contents(self, bin_path: str):
         """
         打印BIN文件内容用于验证数据正确性
