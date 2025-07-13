@@ -1568,6 +1568,32 @@ class MainWindow(QMainWindow):
             QMainWindow {
                 background: #f7f7f7;
             }
+            /* 新增QCheckBox样式 */
+            QCheckBox {
+                spacing: 8px;
+                font-size: 24px;
+                font-weight: bold;
+                color: #222;
+            }
+            QCheckBox::indicator {
+                width: 24px;
+                height: 24px;
+                border: 2px solid #b0b0b0;
+                border-radius: 4px;
+                background: #f9f9f9;
+            }
+            QCheckBox::indicator:checked {
+                background: #1976d2;
+                border: 2px solid #1976d2;
+                image: url(:/qss_icons/rc/checkbox_checked.png);
+            }
+            QCheckBox::indicator:unchecked:hover {
+                border: 2px solid #64b5f6;
+            }
+            QCheckBox::indicator:checked:hover {
+                background: #1565c0;
+                border: 2px solid #1565c0;
+            }
             QGroupBox {
                 border: 2px solid #e0e0e0;
                 border-radius: 14px;
@@ -1664,6 +1690,26 @@ class MainWindow(QMainWindow):
                 font-size: 24px;
                 font-weight: bold;
             }
+            /* 禁用状态样式 */
+            QGroupBox:disabled {
+                border: 2px solid #b0b0b0;
+                background: #f0f0f0;
+                color: #a0a0a0;
+            }
+            QGroupBox:disabled::title {
+                color: #a0a0a0;
+            }
+            QPushButton:disabled {
+                background: #e0e0e0;
+                color: #a0a0a0;
+            }
+            QComboBox:disabled {
+                background: #e0e0e0;
+                color: #a0a0a0;
+            }
+            QLabel:disabled {
+                color: #a0a0a0;
+            }
         """)
 
     def init_ui(self):
@@ -1725,10 +1771,19 @@ class MainWindow(QMainWindow):
         self.eth_disconnect_btn = QPushButton("断开连接")
         self.eth_disconnect_btn.clicked.connect(self.disconnect_eth)
         eth_layout.addWidget(self.eth_disconnect_btn)
+
+        # 新增频率与馈源联动单选框
+        self.freq_feed_link_check = QCheckBox("频率联动")
+        self.freq_feed_link_check.setChecked(False)  # 默认不选中
+        eth_layout.addWidget(self.freq_feed_link_check)
+
+        self.freq_feed_link_check.stateChanged.connect(self._on_freq_link_state_changed)
+        self.current_feed_mode = None
+        self._is_freq_link_connected = False
+
         eth_layout.addStretch()
         right_panel.addWidget(eth_group)
-
-
+        
         # 链路控制
         link_ctrl_group = QGroupBox("链路控制")
         link_ctrl_layout = QHBoxLayout()
@@ -1808,9 +1863,9 @@ class MainWindow(QMainWindow):
         self.raw_power_input.setValidator(self.raw_power_validator)
 
         # 运动控制
-        motion_group = QGroupBox("运动控制")
+        self.motion_group = QGroupBox("运动控制")
         motion_layout = QGridLayout()
-        motion_group.setLayout(motion_layout)
+        self.motion_group.setLayout(motion_layout)
         motion_layout.addWidget(QLabel("复位:"), 0, 0)
         self.home_combo = QComboBox()
         self.home_combo.addItems(["X", "KU", "K", "KA", "ALL"])
@@ -1845,7 +1900,7 @@ class MainWindow(QMainWindow):
         self.speed_query_btn = QPushButton("查询速度")
         self.speed_query_btn.clicked.connect(self.query_speed_cmd)
         motion_layout.addWidget(self.speed_query_btn, 2, 4)
-        right_panel.addWidget(motion_group)
+        right_panel.addWidget(self.motion_group)
 
         main_layout.addLayout(right_panel, stretch=3)
 
@@ -1908,6 +1963,9 @@ class MainWindow(QMainWindow):
             self.status_thread.start()
             # 连接成功后自动查询一次链路状态
             self.query_link_cmd()
+
+            # 连接成功后，自动进入频率联动模式
+            self.freq_feed_link_check.setChecked(True)
             
             # 添加连接成功的视觉反馈
             self.eth_ip_input.setStyleSheet("border: 2px solid #4CAF50;")  # 绿色边框表示连接成功
@@ -1938,6 +1996,57 @@ class MainWindow(QMainWindow):
         else:
             self.show_status("未连接到设备。")
             self.log("未连接到设备。", "WARNING")
+
+
+    def _on_freq_link_state_changed(self, state):
+        """处理频率联动复选框状态变化"""
+        if state == Qt.Checked and not self._is_freq_link_connected:
+            # 启用联动
+            self.link_mode_combo.currentTextChanged.connect(self._update_feed_for_freq)
+            self._is_freq_link_connected = True
+            self.log("频率与馈源联动已启用", "WARNING")
+            
+            # 禁用运动控制区域
+            self.motion_group.setTitle("运动控制 (频率联动模式下禁用)")
+            self.motion_group.setEnabled(False)  # 这会自动禁用所有子控件
+            
+        elif state != Qt.Checked and self._is_freq_link_connected:
+            # 禁用联动
+            try:
+                self.link_mode_combo.currentTextChanged.disconnect(self._update_feed_for_freq)
+            except TypeError:
+                pass
+            self._is_freq_link_connected = False
+            self.log("频率与馈源联动已禁用", "WARNING")
+            
+            # 启用运动控制区域
+            self.motion_group.setTitle("运动控制")
+            self.motion_group.setEnabled(True)  # 这会自动启用所有子控件
+    
+    def _update_feed_for_freq(self, mode):
+        """根据频率更新馈源设置"""
+        if not self.tcp_client.connected:
+            return
+        
+        # 解析频率范围
+        freq_ranges = {
+            "FEED_X_THETA": (8.0, 12.0),
+            "FEED_X_PHI": (8.0, 12.0),
+            "FEED_KU_THETA": (12.0, 18.0),
+            "FEED_KU_PHI": (12.0, 18.0),
+            "FEED_K_THETA": (18.0, 26.5),
+            "FEED_K_PHI": (18.0, 26.5),
+            "FEED_KA_THETA": (26.5, 40.0),
+            "FEED_KA_PHI": (26.5, 40.0)
+        }
+        
+        if mode in freq_ranges:
+            self.current_feed_mode = mode
+            min_freq, max_freq = freq_ranges[mode]
+            center_freq = (min_freq + max_freq) / 2
+            self.freq_input.setText(f"{center_freq:.3f}GHz")
+            self.send_freq_cmd()
+            self.log(f"频率联动: 自动设置为{center_freq}GHz ({mode})", "INFO")
 
 
     def is_valid_frequency(self, freq_str):
@@ -2131,10 +2240,7 @@ class MainWindow(QMainWindow):
             self.log(f"文件路径: {os.path.abspath(filepath)}", "INFO")
         except Exception as e:
             self.log(f"获取文件信息失败: {str(e)}", "WARNING")
-        
-        meta = self.cal_manager.current_meta
-        data_points = self.cal_manager.data_points
-        
+          
         self.log("\n=== 文件元数据 ===", "INFO")
         # 打印元数据
         if isinstance(meta, dict):
