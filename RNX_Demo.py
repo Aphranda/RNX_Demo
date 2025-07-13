@@ -2054,18 +2054,14 @@ class MainWindow(QMainWindow):
             self.log(f"原始功率转换错误: {str(e)}", "WARNING")
 
 
-
     def load_calibration_file(self, filepath: str):
         """加载校准文件"""
         from PyQt5.QtWidgets import QFileDialog
-
-
+    
         # 确保cal_manager已初始化
         if self.cal_manager is None:
             self.cal_manager = CalibrationFileManager(log_callback=self.log)
-
-           # self.cal_manager.generate_default_calibration((8, 40), 0.01)  # 生成默认校准数据
-        
+    
         # 获取最近校准文件目录
         cal_dir = "calibrations"  # 默认目录
         if hasattr(self, 'cal_manager'):
@@ -2078,24 +2074,17 @@ class MainWindow(QMainWindow):
             cal_dir, 
             "校准文件 (*.csv *.bin);;所有文件 (*)"
         )
-
-        
-        
+    
         if file_path:
             self.status_panel.cal_file_input.setText(file_path)
             self.log(f"已选择校准文件: {file_path}", "INFO")
-
-            # 打印文件内容验证
-            if file_path.lower().endswith('.bin'):
-                self._print_bin_file_contents(file_path)  # 调用解耦后的BIN文件打印函数
-            elif file_path.lower().endswith('.csv'):
-                self._print_csv_file_contents(file_path)
-            
+    
             # 使用CalibrationFileManager加载文件
-            if not hasattr(self, 'cal_manager'):
-                self.cal_manager = CalibrationFileManager(log_callback=self.log)
-            
             result = self.cal_manager.load_calibration_file(file_path)
+    
+            # 打印文件内容验证（不重新加载文件）
+            self._print_cal_file_contents(file_path, loaded_data=result)
+    
             if result:
                 self.calibration_data = result['data']
                 self.compensation_enabled = True
@@ -2112,104 +2101,104 @@ class MainWindow(QMainWindow):
                 )
                 self.log("校准文件加载失败", "ERROR")
 
-    def _print_bin_file_contents(self, bin_path: str):
-        """打印BIN文件内容用于验证数据正确性"""
+    def _print_cal_file_contents(self, filepath: str, loaded_data=None):
+        """打印校准文件内容用于验证数据正确性"""
+        # 直接使用已加载的数据或self.cal_manager中的数据
+        if loaded_data is not None:
+            meta = loaded_data.get('meta', {})
+            data_points = loaded_data.get('data', [])
+        elif hasattr(self, 'cal_manager') and self.cal_manager:
+            meta = self.cal_manager.current_meta
+            data_points = self.cal_manager.data_points
+        else:
+            self.log("校准管理器未初始化", "ERROR")
+            return
+        
+        # 显示文件格式信息
+        self.log("\n=== 文件信息 ===", "INFO")
         try:
-            result = self.cal_manager._read_bin_file(bin_path)
-            if not result:
-                self.log("无法读取BIN文件内容", "ERROR")
-                return
-                
-            meta = result['meta']
-            data_points = result['data']
+            file_size = os.path.getsize(filepath)
+            self.log(f"文件大小: {file_size/1024:.2f} KB", "INFO")
             
-            self.log("\n=== BIN文件元数据 ===", "INFO")
+            if filepath.lower().endswith('.bin'):
+                self.log("文件格式: 二进制校准文件 (RNXC格式)", "INFO")
+                self.log("数据编码: 每个数据点36字节(频率:4字节float + 8个参数:32字节)", "INFO")
+            elif filepath.lower().endswith('.csv'):
+                self.log("文件格式: CSV文本文件 (UTF-8编码)", "INFO")
+                self.log("数据格式: 逗号分隔值,每行9个字段(频率+8个参数)", "INFO")
+                
+            # 显示文件完整路径
+            self.log(f"文件路径: {os.path.abspath(filepath)}", "INFO")
+        except Exception as e:
+            self.log(f"获取文件信息失败: {str(e)}", "WARNING")
+        
+        meta = self.cal_manager.current_meta
+        data_points = self.cal_manager.data_points
+        
+        self.log("\n=== 文件元数据 ===", "INFO")
+        # 打印元数据
+        if isinstance(meta, dict):
             self.log(f"创建时间: {meta.get('created', '未知')}", "INFO")
             self.log(f"操作员: {meta.get('operator', '未知')}", "INFO")
-            self.log(f"信号源: {meta.get('signal_gen', ['未知', '未知'])[0]} (SN: {meta.get('signal_gen', ['', '未知'])[1]})", "INFO")
-            self.log(f"频谱分析仪: {meta.get('spec_analyzer', ['未知', '未知'])[0]} (SN: {meta.get('spec_analyzer', ['', '未知'])[1]})", "INFO")
-            self.log(f"天线: {meta.get('antenna', ['未知', '未知'])[0]} (SN: {meta.get('antenna', ['', '未知'])[1]})", "INFO")
-            self.log(f"环境: {meta.get('environment', [0, 0])[0]}°C, {meta.get('environment', [0, 0])[1]}%RH", "INFO")
+            if 'signal_gen' in meta:
+                sg_info = meta['signal_gen']
+                self.log(f"信号源: {sg_info[0]} (SN: {sg_info[1]})", "INFO")
+            if 'spec_analyzer' in meta:
+                sa_info = meta['spec_analyzer']
+                self.log(f"频谱分析仪: {sa_info[0]} (SN: {sa_info[1]})", "INFO")
+            if 'antenna' in meta:
+                ant_info = meta['antenna']
+                self.log(f"天线: {ant_info[0]} (SN: {ant_info[1]})", "INFO")
+            if 'environment' in meta:
+                env_info = meta['environment']
+                self.log(f"环境: {env_info[0]}°C, {env_info[1]}%RH", "INFO")
             
-            freq_params = meta.get('freq_params', {})
-            self.log("\n=== 频率参数 ===", "INFO")
-            self.log(f"起始频率: {freq_params.get('start_ghz', '未知')} GHz", "INFO")
-            self.log(f"终止频率: {freq_params.get('stop_ghz', '未知')} GHz", "INFO")
-            self.log(f"步进: {freq_params.get('step_ghz', '未知')} GHz", "INFO")
-            self.log(f"点数: {meta.get('points', '未知')}", "INFO")
+            if 'freq_params' in meta:
+                freq_params = meta['freq_params']
+                self.log("\n=== 频率参数 ===", "INFO")
+                self.log(f"起始频率: {freq_params.get('start_ghz', '未知')} GHz", "INFO")
+                self.log(f"终止频率: {freq_params.get('stop_ghz', '未知')} GHz", "INFO")
+                self.log(f"步进: {freq_params.get('step_ghz', '未知')} GHz", "INFO")
+                self.log(f"点数: {meta.get('points', '未知')}", "INFO")
+        
+        # # 打印校准数据
+        # self.log("\n=== 数据点示例 ===", "INFO")
+        # if data_points:
+        #     # 打印前5个点
+        #     self.log("前5个数据点:", "INFO")
+        #     for i, point in enumerate(data_points[:5]):
+        #         self.log(
+        #             f"点 {i}: 频率={point['freq']:.3f}GHz, "
+        #             f"Xθ={point['x_theta']:.2f}, Xφ={point['x_phi']:.2f}, "
+        #             f"KUθ={point['ku_theta']:.2f}, KUφ={point['ku_phi']:.2f}, "
+        #             f"Kθ={point['k_theta']:.2f}, Kφ={point['k_phi']:.2f}, "
+        #             f"KAθ={point['ka_theta']:.2f}, KAφ={point['ka_phi']:.2f}", 
+        #             "INFO"
+        #         )
             
-            self.log("\n=== 数据点示例 ===", "INFO")
-            if data_points:
-                # 打印前5个点
-                self.log("前5个数据点:", "INFO")
-                for i, point in enumerate(data_points[:5]):
-                    self.log(
-                        f"点 {i}: 频率={point['freq']:.3f}GHz, "
-                        f"Xθ={point['x_theta']:.2f}, Xφ={point['x_phi']:.2f}, "
-                        f"KUθ={point['ku_theta']:.2f}, KUφ={point['ku_phi']:.2f}, "
-                        f"Kθ={point['k_theta']:.2f}, Kφ={point['k_phi']:.2f}, "
-                        f"KAθ={point['ka_theta']:.2f}, KAφ={point['ka_phi']:.2f}", 
-                        "INFO"
-                    )
-                
-                # 打印后5个点（如果存在）
-                if len(data_points) > 5:
-                    self.log("\n最后5个数据点:", "INFO")
-                    for i, point in enumerate(data_points[-5:], len(data_points)-5):
-                        self.log(
-                            f"点 {i}: 频率={point['freq']:.3f}GHz, "
-                            f"Xθ={point['x_theta']:.2f}, Xφ={point['x_phi']:.2f}, "
-                            f"KUθ={point['ku_theta']:.2f}, KUφ={point['ku_phi']:.2f}, "
-                            f"Kθ={point['k_theta']:.2f}, Kφ={point['k_phi']:.2f}, "
-                            f"KAθ={point['ka_theta']:.2f}, KAφ={point['ka_phi']:.2f}", 
-                            "INFO"
-                        )
-            
-            self.log("\n=== 总结 ===", "INFO")
-            self.log(f"总数据点数: {len(data_points)}", "INFO")
-            self.log(f"预期点数: {meta.get('points', '未知')}", "INFO")
-            if len(data_points) == meta.get('points', -1):
+        #     # 打印后5个点（如果存在）
+        #     if len(data_points) > 5:
+        #         self.log("\n最后5个数据点:", "INFO")
+        #         for i, point in enumerate(data_points[-5:], len(data_points)-5):
+        #             self.log(
+        #                 f"点 {i}: 频率={point['freq']:.3f}GHz, "
+        #                 f"Xθ={point['x_theta']:.2f}, Xφ={point['x_phi']:.2f}, "
+        #                 f"KUθ={point['ku_theta']:.2f}, KUφ={point['ku_phi']:.2f}, "
+        #                 f"Kθ={point['k_theta']:.2f}, Kφ={point['k_phi']:.2f}, "
+        #                 f"KAθ={point['ka_theta']:.2f}, KAφ={point['ka_phi']:.2f}", 
+        #                 "INFO"
+        #             )
+        
+        self.log("\n=== 总结 ===", "INFO")
+        self.log(f"总数据点数: {len(data_points)}", "INFO")
+        if isinstance(meta, dict) and 'points' in meta:
+            self.log(f"预期点数: {meta['points']}", "INFO")
+            if len(data_points) == meta['points']:
                 self.log("数据点数匹配", "SUCCESS")
             else:
-                self.log("数据点数不匹配", "ERROR")
+                self.log("数据点数不匹配", "WARNING")
         
-        except Exception as e:
-            self.log(f"读取BIN文件失败: {str(e)}", "ERROR")
 
-    def _print_csv_file_contents(self, csv_path: str):
-        """打印CSV文件内容用于验证数据正确性"""
-        try:
-            with open(csv_path, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-            
-            self.log("\n=== CSV文件内容 ===", "INFO")
-            
-            # 打印前10行（通常是元数据和标题）
-            self.log("文件头:", "INFO")
-            for line in lines[:10]:
-                if line.strip():  # 跳过空行
-                    self.log(line.strip(), "INFO")
-            
-            # 打印数据部分的前5行和后5行
-            data_lines = [line for line in lines if not line.startswith('!') and line.strip()]
-            if len(data_lines) > 1:  # 第一行是标题
-                self.log("\n数据前5行:", "INFO")
-                for line in data_lines[1:6]:
-                    self.log(line.strip(), "INFO")
-                
-                if len(data_lines) > 6:
-                    self.log("\n数据后5行:", "INFO")
-                    for line in data_lines[-5:]:
-                        self.log(line.strip(), "INFO")
-            
-            # 打印文件统计信息
-            self.log("\n=== 文件统计 ===", "INFO")
-            self.log(f"总行数: {len(lines)}", "INFO")
-            self.log(f"数据行数: {len(data_lines)-1}", "INFO")  # 减去标题行
-            self.log(f"文件大小: {os.path.getsize(csv_path)/1024:.2f} KB", "INFO")
-            
-        except Exception as e:
-            self.log(f"读取CSV文件失败: {str(e)}", "ERROR")
 
     def get_compensation_value(self, freq_ghz: float) -> float:
         """
@@ -2753,6 +2742,7 @@ class CalibrationFileManager:
         self.base_dir = os.path.abspath(base_dir)
         self.active_file: Optional[str] = None
         self.current_meta: Dict = {}
+        self.data_points: List = []
         self._file_lock = threading.Lock()
         
         os.makedirs(self.base_dir, exist_ok=True)
@@ -2812,50 +2802,6 @@ class CalibrationFileManager:
             self.log(f"生成二进制文件失败: {str(e)}", "ERROR")
             return None
         
-    def _read_bin_file(self, bin_path: str) -> Optional[Dict]:
-        """读取BIN格式校准文件"""
-        try:
-            with open(bin_path, 'rb') as f:
-                # 验证头部
-                magic = f.read(4)
-                if magic != b'RNXC':
-                    raise ValueError("无效的二进制文件格式")
-                
-                version = ord(f.read(1))
-                if version != 1:
-                    raise ValueError(f"不支持的版本号: {version}")
-                
-                # 读取元数据
-                meta_len = int.from_bytes(f.read(4), 'little')
-                meta_json = f.read(meta_len).decode('utf-8')
-                meta = json.loads(meta_json)
-                
-                # 读取数据点
-                data_points = []
-                while True:
-                    freq_bytes = f.read(4)
-                    if not freq_bytes:
-                        break
-                    
-                    freq = struct.unpack('f', freq_bytes)[0]
-                    data = struct.unpack('8f', f.read(32))  # 8个float32=32字节
-                    
-                    data_points.append({
-                        'freq': freq,
-                        'x_theta': data[0], 'x_phi': data[1],
-                        'ku_theta': data[2], 'ku_phi': data[3],
-                        'k_theta': data[4], 'k_phi': data[5],
-                        'ka_theta': data[6], 'ka_phi': data[7]
-                    })
-                
-                return {
-                    'meta': meta,
-                    'data': data_points
-                }
-        except Exception as e:
-            self.log(f"读取二进制文件失败: {str(e)}", "ERROR")
-            return None
-
     def generate_default_calibration(self, freq_range: Tuple[float, float] = (8.0, 40.0), 
                                 step: float = 0.01) -> str:
         """
@@ -2914,7 +2860,6 @@ class CalibrationFileManager:
         archived_path = self.finalize_calibration("系统自动生成的默认校准文件")
         
         return archived_path
-
 
     def create_new_calibration(self, 
                              equipment_meta: Dict, 
@@ -3075,7 +3020,6 @@ class CalibrationFileManager:
         
         return archived_csv, archived_bin
 
-    
     def load_calibration_file(self, filepath: str) -> Optional[Dict]:
         """
         加载校准文件(支持CSV和BIN格式)
@@ -3089,50 +3033,307 @@ class CalibrationFileManager:
         
         # 根据扩展名选择加载方式
         if filepath.lower().endswith('.bin'):
-            return self._read_bin_file(filepath)
+            return self._load_bin_file(filepath)
         else:
             return self._load_csv_file(filepath)
+        
+    def _load_bin_file(self, bin_path: str) -> Optional[Dict]:
+        """
+        加载BIN格式校准文件
+        1. 先验证文件有效性
+        2. 再读取文件内容
+        """
+        # 先验证文件
+        if not self._validate_bin_file(bin_path):
+            self.log(f"BIN文件验证失败: {bin_path}", "ERROR")
+            return None
+        
+        # 验证通过后读取内容
+        return self._read_bin_content(bin_path)
+
+    def _validate_bin_file(self, filepath: str) -> bool:
+        """
+        验证BIN格式校准文件结构是否有效
+        不解析具体内容，只检查文件格式和完整性
+        """
+        try:
+            with open(filepath, 'rb') as f:
+                # 验证头部
+                magic = f.read(4)
+                if magic != b'RNXC':
+                    self.log("无效的二进制文件格式", "WARNING")
+                    return False
+                
+                version = ord(f.read(1))
+                if version != 1:
+                    self.log(f"不支持的版本号: {version}", "WARNING")
+                    return False
+                
+                # 读取元数据长度
+                meta_len = int.from_bytes(f.read(4), 'little')
+                # 跳过元数据
+                f.seek(meta_len, 1)
+                
+                # 检查数据点数量
+                file_size = os.path.getsize(filepath)
+                header_size = 4 + 1 + 4 + meta_len  # 幻数+版本+长度+元数据
+                data_size = file_size - header_size
+                
+                if data_size % 36 != 0:  # 每个数据点36字节(4+32)
+                    self.log("数据大小不匹配", "WARNING")
+                    return False
+                
+                return True
+                
+        except Exception as e:
+            self.log(f"验证二进制文件失败: {str(e)}", "ERROR")
+            return False
+        
+    def _read_bin_content(self, bin_path: str) -> Optional[Dict]:
+        """
+        读取已验证的BIN文件内容
+        假设文件已经通过验证，直接解析内容
+        """
+        try:
+            with open(bin_path, 'rb') as f:
+                # 跳过已验证的头部
+                f.read(4)  # 幻数
+                f.read(1)  # 版本
+                meta_len = int.from_bytes(f.read(4), 'little')
+                meta_json = f.read(meta_len).decode('utf-8')
+                meta = json.loads(meta_json)
+                
+                # 读取数据点
+                data_points = []
+                while True:
+                    freq_bytes = f.read(4)
+                    if not freq_bytes:
+                        break
+                    
+                    freq = struct.unpack('f', freq_bytes)[0]
+                    data = struct.unpack('8f', f.read(32))  # 8个float32=32字节
+                    
+                    data_points.append({
+                        'freq': freq,
+                        'x_theta': data[0], 'x_phi': data[1],
+                        'ku_theta': data[2], 'ku_phi': data[3],
+                        'k_theta': data[4], 'k_phi': data[5],
+                        'ka_theta': data[6], 'ka_phi': data[7]
+                    })
+                self.current_meta = meta
+                self.data_points = data_points
+                return {
+                    'meta': meta,
+                    'data': data_points
+                }
+        except Exception as e:
+            self.log(f"读取二进制文件内容失败: {str(e)}", "ERROR")
+            return None
 
     def _load_csv_file(self, csv_path: str) -> Optional[Dict]:
-        """加载CSV格式校准文件"""
-        # 先验证文件有效性
+        """
+        加载CSV格式校准文件
+        1. 先验证文件有效性
+        2. 再读取文件内容
+        """
+        # 先验证文件
         if not self._validate_csv_file(csv_path):
             self.log(f"CSV文件验证失败: {csv_path}", "ERROR")
             return None
+        
+        # 验证通过后读取内容
+        return self._read_csv_content(csv_path)
 
+    def _validate_csv_file(self, filepath: str) -> bool:
+        """
+        验证CSV格式校准文件结构是否有效
+        不解析具体数据值，只检查文件结构和元数据
+        """
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            # 检查文件头
+            if not lines or not lines[0].startswith("!RNX Dual-Polarized Feed Calibration Data"):
+                self.log("无效的文件头", "WARNING")
+                return False
+                
+            # 定义必需的头字段
+            REQUIRED_HEADERS = {
+                "!Created:", "!Operator:", "!  Signal_Generator:", 
+                "!  Spectrum_Analyzer:", "!  Antenna:", "!Environment:",
+                "!  Start:", "!  Stop:", "!  Step:", "!  Points:", "!Data Columns:"
+            }
+            
+            # 检查所有必需字段是否存在
+            header_lines = [line.strip() for line in lines if line.startswith("!")]
+            missing_headers = [h for h in REQUIRED_HEADERS if not any(l.startswith(h) for l in header_lines)]
+            
+            if missing_headers:
+                self.log(f"文件头缺少必需字段: {', '.join(missing_headers)}", "WARNING")
+                return False
+            
+            # 检查数据部分标题行
+            data_lines = [line for line in lines if not line.startswith("!") and line.strip()]
+            if not data_lines or not data_lines[0].startswith("Frequency(GHz),"):
+                self.log("缺少或无效的数据标题行", "WARNING")
+                return False
+                
+            # 检查结束标记
+            if not any(line.startswith("!EndOfData:") for line in lines[-3:]):
+                self.log("缺少结束标记", "WARNING")
+                return False
+                
+            if not any(line.startswith("!MD5:") for line in lines[-3:]):
+                self.log("缺少MD5校验", "WARNING")
+                return False
+                
+            return True
+            
+        except Exception as e:
+            self.log(f"验证CSV文件失败: {str(e)}", "ERROR")
+            return False
+
+    def _read_csv_content(self, csv_path: str) -> Optional[Dict]:
+        """
+        读取已验证的CSV文件内容
+        假设文件已经通过验证，直接解析内容
+        
+        返回包含完整元数据和数据点的字典:
+        {
+            'meta': {
+                'file_format': str,
+                'header': list,
+                'created': str,
+                'operator': str,
+                'signal_gen': (model, sn),
+                'spec_analyzer': (model, sn),
+                'antenna': (model, sn),
+                'environment': (temp, humidity),
+                'freq_params': {
+                    'start_ghz': float,
+                    'stop_ghz': float,
+                    'step_ghz': float
+                },
+                'points': int,
+                'version_notes': str,
+                'end_of_data': str,
+                'md5': str
+            },
+            'data': list  # 数据点列表
+        }
+        """
         try:
             with open(csv_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
             
-            # 解析元数据
+            # 初始化元数据字典
             meta = {
                 'file_format': 'csv',
-                'header': []
+                'header': [],
+                'signal_gen': ('未知', '未知'),
+                'spec_analyzer': ('未知', '未知'),
+                'antenna': ('未知', '未知'),
+                'environment': (0.0, 0.0),
+                'freq_params': {
+                    'start_ghz': 0.0,
+                    'stop_ghz': 0.0,
+                    'step_ghz': 0.0
+                }
             }
+            
             data_start = 0
             for i, line in enumerate(lines):
+                line = line.strip()
+                if not line:
+                    continue
+                    
                 if line.startswith('!'):
-                    meta['header'].append(line.strip())
-                    # 解析特定元数据
+                    meta['header'].append(line)
+                    
+                    # 解析创建时间
                     if line.startswith('!Created:'):
                         meta['created'] = line.split(':', 1)[1].strip()
+                    
+                    # 解析操作员
                     elif line.startswith('!Operator:'):
                         meta['operator'] = line.split(':', 1)[1].strip()
+                    
+                    # 解析信号源信息
+                    elif line.startswith('!  Signal_Generator:'):
+                        parts = line.split('_SN:')
+                        model = parts[0].split(':', 1)[1].strip()
+                        sn = parts[1].strip() if len(parts) > 1 else '未知'
+                        meta['signal_gen'] = (model, sn)
+                    
+                    # 解析频谱分析仪信息
+                    elif line.startswith('!  Spectrum_Analyzer:'):
+                        parts = line.split('_SN:')
+                        model = parts[0].split(':', 1)[1].strip()
+                        sn = parts[1].strip() if len(parts) > 1 else '未知'
+                        meta['spec_analyzer'] = (model, sn)
+                    
+                    # 解析天线信息
+                    elif line.startswith('!  Antenna:'):
+                        parts = line.split('_SN:')
+                        model = parts[0].split(':', 1)[1].strip()
+                        sn = parts[1].strip() if len(parts) > 1 else '未知'
+                        meta['antenna'] = (model, sn)
+                    
+                    # 解析环境信息
+                    elif line.startswith('!Environment:'):
+                        env_parts = line.split(':', 1)[1].strip().split(',')
+                        temp = float(env_parts[0].replace('C', '').strip())
+                        humidity = float(env_parts[1].replace('%RH', '').strip())
+                        meta['environment'] = (temp, humidity)
+                    
+                    # 解析频率参数
+                    elif line.startswith('!  Start:'):
+                        meta['freq_params']['start_ghz'] = float(line.split(':', 1)[1].replace('GHz', '').strip())
+                    elif line.startswith('!  Stop:'):
+                        meta['freq_params']['stop_ghz'] = float(line.split(':', 1)[1].replace('GHz', '').strip())
+                    elif line.startswith('!  Step:'):
+                        meta['freq_params']['step_ghz'] = float(line.split(':', 1)[1].replace('GHz', '').strip())
                     elif line.startswith('!  Points:'):
                         meta['points'] = int(line.split(':', 1)[1].strip())
+                    
+                    # 解析版本说明
+                    elif line.startswith('!VersionNotes:'):
+                        meta['version_notes'] = line.split(':', 1)[1].strip()
+                    
+                    # 解析结束标记
+                    elif line.startswith('!EndOfData:'):
+                        meta['end_of_data'] = line.split(':', 1)[1].strip()
+                    
+                    # 解析MD5校验
+                    elif line.startswith('!MD5:'):
+                        meta['md5'] = line.split(':', 1)[1].strip()
+                
                 else:
                     data_start = i
                     break
             
-            # 解析数据
-            data_points = []
-            for line in lines[data_start:]:
-                if line.startswith('!') or not line.strip():
-                    continue
+            # 跳过标题行（第一个非注释行）
+            data_lines = [line.strip() for line in lines[data_start:] if line.strip() and not line.startswith('!')]
+            if not data_lines:
+                self.log("没有有效数据行", "WARNING")
+                return None
                 
-                parts = line.strip().split(',')
+            # 确认标题行
+            header_line = data_lines[0]
+            if not header_line.startswith("Frequency(GHz),"):
+                self.log(f"无效的数据标题行: {header_line}", "WARNING")
+                return None
+                
+            # 处理数据行（跳过标题行）
+            data_points = []
+            for line in data_lines[1:]:
+                if not line or line.startswith('!'):
+                    continue
+                    
+                parts = line.split(',')
                 if len(parts) != 9:
-                    self.log(f"数据行格式错误，应有9列，实际{len(parts)}列: {line.strip()}", "WARNING")
+                    self.log(f"数据行格式错误，应有9列，实际{len(parts)}列: {line}", "WARNING")
                     continue
                 
                 try:
@@ -3143,11 +3344,21 @@ class CalibrationFileManager:
                         continue
                     
                     # 验证补偿值范围 (假设在-100到100 dB之间)
-                    compensation_values = [float(x) for x in parts[1:9]]
-                    if any(not (-100 <= val <= 100) for val in compensation_values):
-                        self.log(f"补偿值超出有效范围(-100-100dB): {line.strip()}", "WARNING")
-                        continue
+                    compensation_values = []
+                    for val in parts[1:9]:
+                        try:
+                            num = float(val)
+                            if not (-100 <= num <= 100):
+                                self.log(f"补偿值超出有效范围(-100-100dB): {val}", "WARNING")
+                                break
+                            compensation_values.append(num)
+                        except ValueError:
+                            self.log(f"无效数值格式: {val}", "WARNING")
+                            break
                     
+                    if len(compensation_values) != 8:
+                        continue  # 跳过无效行
+                        
                     data_points.append({
                         'freq': freq,
                         'x_theta': compensation_values[0],
@@ -3160,22 +3371,20 @@ class CalibrationFileManager:
                         'ka_phi': compensation_values[7]
                     })
                 except ValueError as e:
-                    self.log(f"数据行解析失败: {line.strip()} - {str(e)}", "WARNING")
+                    self.log(f"数据行解析失败: {line} - {str(e)}", "WARNING")
                     continue
             
-            # 检查数据点数是否匹配元数据
-            if 'points' in meta and len(data_points) != meta['points']:
-                self.log(
-                    f"数据点数不匹配: 元数据声明{meta['points']}点, 实际{len(data_points)}点",
-                    "WARNING"
-                )
+            # 更新实例变量
+            self.current_meta = meta
+            self.data_points = data_points
             
             return {
                 'meta': meta,
                 'data': data_points
             }
+            
         except Exception as e:
-            self.log(f"读取CSV文件失败: {str(e)}", "ERROR")
+            self.log(f"读取CSV文件内容失败: {str(e)}", "ERROR")
             return None
 
 
@@ -3227,225 +3436,6 @@ class CalibrationFileManager:
         except Exception as e:
             self.log(f"备份失败: {str(e)}", "ERROR")
             return False
-
-    def _validate_bin_file(self, filepath: str) -> bool:
-        """验证BIN格式校准文件"""
-        try:
-            with open(filepath, 'rb') as f:
-                # 验证头部
-                magic = f.read(4)
-                if magic != b'RNXC':
-                    self.log("无效的二进制文件格式", "WARNING")
-                    return False
-                
-                version = ord(f.read(1))
-                if version != 1:
-                    self.log(f"不支持的版本号: {version}", "WARNING")
-                    return False
-                
-                # 读取元数据长度
-                meta_len = int.from_bytes(f.read(4), 'little')
-                # 跳过元数据
-                f.seek(meta_len, 1)
-                
-                # 检查数据点数量
-                file_size = os.path.getsize(filepath)
-                header_size = 4 + 1 + 4 + meta_len  # 幻数+版本+长度+元数据
-                data_size = file_size - header_size
-                
-                if data_size % 36 != 0:  # 每个数据点36字节(4+32)
-                    self.log("数据大小不匹配", "WARNING")
-                    return False
-                
-                return True
-                
-        except Exception as e:
-            self.log(f"验证二进制文件失败: {str(e)}", "ERROR")
-            return False
-
-    def _validate_csv_file(self, filepath: str) -> bool:
-        """验证CSV格式校准文件"""
-        try:
-            with open(filepath, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-            
-            # 检查文件头
-            if not lines or not lines[0].startswith("!RNX Dual-Polarized Feed Calibration Data"):
-                self.log("无效的文件头", "WARNING")
-                return False
-                
-            # 定义必需的头字段及其验证函数
-            REQUIRED_HEADERS = {
-                "!Created:": lambda x: bool(x.strip()),
-                "!Operator:": lambda x: bool(x.strip()),
-                "!  Signal_Generator:": lambda x: "_SN:" in x,
-                "!  Spectrum_Analyzer:": lambda x: "_SN:" in x,
-                "!  Antenna:": lambda x: "_SN:" in x,
-                "!Environment:": lambda x: "C, " in x and "%RH" in x,
-                "!  Start:": lambda x: x.strip().endswith("GHz"),
-                "!  Stop:": lambda x: x.strip().endswith("GHz"),
-                "!  Step:": lambda x: x.strip().endswith("GHz"),
-                "!  Points:": lambda x: x.strip().isdigit(),
-                "!Data Columns:": lambda x: True  # 只需存在即可
-            }
-            
-            # 检查所有必需字段是否存在且有效
-            missing_or_invalid = []
-            header_lines = [line.strip() for line in lines if line.startswith("!")]
-            
-            for header, validator in REQUIRED_HEADERS.items():
-                found = False
-                for line in header_lines:
-                    if line.startswith(header):
-                        value = line[len(header):].strip()
-                        if not validator(value):
-                            missing_or_invalid.append(f"无效值 '{value}' 对于 {header}")
-                        found = True
-                        break
-                if not found:
-                    missing_or_invalid.append(f"缺少必需字段 {header}")
-            
-            if missing_or_invalid:
-                self.log("文件头验证失败:\n" + "\n".join(missing_or_invalid), "WARNING")
-                return False
-            
-            # 提取关键元数据
-            meta = {}
-            for line in header_lines:
-                if line.startswith("!  Start:"):
-                    meta['start_ghz'] = float(line.split(":")[1].strip().split()[0])
-                elif line.startswith("!  Stop:"):
-                    meta['stop_ghz'] = float(line.split(":")[1].strip().split()[0])
-                elif line.startswith("!  Step:"):
-                    meta['step_ghz'] = float(line.split(":")[1].strip().split()[0])
-                elif line.startswith("!  Points:"):
-                    meta['points'] = int(line.split(":")[1].strip())
-            print(meta)
-            # 计算预期的点数
-            try:
-                calculated_points = int(round((meta['stop_ghz'] - meta['start_ghz']) / meta['step_ghz'])) + 1
-                if meta['points'] != calculated_points:
-                    self.log(
-                        f"点数不一致: 元数据声明{meta['points']}点, "
-                        f"但根据范围计算应有{calculated_points}点 ({(meta['stop_ghz']-meta['start_ghz'])/meta['step_ghz']})", 
-                        "WARNING"
-                    )
-                    return False
-            except ZeroDivisionError:
-                self.log("步进值不能为0", "ERROR")
-                return False
-            
-            # 检查数据部分
-            data_lines = [line for line in lines if not line.startswith("!") and line.strip()]
-            
-            # 验证标题行
-            if not data_lines or not data_lines[0].startswith("Frequency(GHz),"):
-                self.log("缺少或无效的数据标题行", "WARNING")
-                return False
-            
-            # 验证数据行数 (减去标题行)
-            if len(data_lines) - 1 != meta['points']:
-                self.log(
-                    f"数据点数不匹配: 预期{meta['points']}点, 实际{len(data_lines)-1}点", 
-                    "WARNING"
-                )
-                return False
-            
-            # 验证数据行格式
-            for i, line in enumerate(data_lines[1:]):  # 跳过标题行
-                parts = line.strip().split(',')
-                if len(parts) != 9:
-                    self.log(f"第{i+2}行数据格式错误: 应有9列, 实际{len(parts)}列", "WARNING")
-                    return False
-                try:
-                    freq = float(parts[0])
-                    if not (meta['start_ghz'] <= freq <= meta['stop_ghz']):
-                        self.log(f"第{i+2}行频率{freq}GHz超出范围({meta['start_ghz']}-{meta['stop_ghz']}GHz)", "WARNING")
-                        return False
-                    # 验证所有数据列都是数字
-                    [float(x) for x in parts[1:]]
-                except ValueError:
-                    self.log(f"第{i+2}行包含非数字数据", "WARNING")
-                    return False
-            
-            # 检查结束标记和校验值
-            if not any(line.startswith("!EndOfData:") for line in lines[-3:]):
-                self.log("缺少结束标记", "WARNING")
-                return False
-                
-            if not any(line.startswith("!MD5:") for line in lines[-3:]):
-                self.log("缺少MD5校验", "WARNING")
-                return False
-                
-            return True
-            
-        except Exception as e:
-            self.log(f"验证CSV文件失败: {str(e)}", "ERROR")
-            return False
-
-
-
-
-    def print_bin_file_contents(self, bin_path: str):
-        """
-        打印BIN文件内容用于验证数据正确性
-        
-        :param bin_path: BIN文件路径
-        """
-        if not os.path.exists(bin_path):
-            self.log(f"BIN文件不存在: {bin_path}", "ERROR")
-            return
-        
-        try:
-            with open(bin_path, 'rb') as f:
-                # 读取头部
-                magic = f.read(4)
-                version = ord(f.read(1))
-                meta_len = int.from_bytes(f.read(4), 'little')
-                meta_json = f.read(meta_len).decode('utf-8')
-                meta = json.loads(meta_json)
-                
-                self.log("\n=== BIN文件元数据 ===", "INFO")
-                self.log(f"幻数: {magic}", "INFO")
-                self.log(f"版本: {version}", "INFO")
-                self.log(f"元数据长度: {meta_len} 字节", "INFO")
-                self.log("元数据内容:", "INFO")
-                for key, value in meta.items():
-                    self.log(f"  {key}: {value}", "INFO")
-                
-                self.log("\n=== 数据点 ===", "INFO")
-                point_count = 0
-                while True:
-                    freq_bytes = f.read(4)
-                    if not freq_bytes:
-                        break
-                    
-                    freq = struct.unpack('f', freq_bytes)[0]
-                    data = struct.unpack('8f', f.read(32))
-                    
-                    # 打印前5个和后5个数据点，避免日志过多
-                    if point_count < 5 or point_count >= (meta.get('points', 0) - 5):
-                        self.log(
-                            f"点 {point_count}: 频率={freq:.3f}GHz, "
-                            f"Xθ={data[0]:.2f}, Xφ={data[1]:.2f}, "
-                            f"KUθ={data[2]:.2f}, KUφ={data[3]:.2f}, "
-                            f"Kθ={data[4]:.2f}, Kφ={data[5]:.2f}, "
-                            f"KAθ={data[6]:.2f}, KAφ={data[7]:.2f}", 
-                            "INFO"
-                        )
-                    
-                    point_count += 1
-                
-                self.log(f"\n=== 总结 ===", "INFO")
-                self.log(f"总数据点数: {point_count}", "INFO")
-                self.log(f"预期点数: {meta.get('points', '未知')}", "INFO")
-                if point_count == meta.get('points', -1):
-                    self.log("数据点数匹配", "SUCCESS")
-                else:
-                    self.log("数据点数不匹配", "ERROR")
-        
-        except Exception as e:
-            self.log(f"读取BIN文件失败: {str(e)}", "ERROR")
 
     def get_recent_calibrations(self, days: int = 7) -> List[Dict]:
         """
