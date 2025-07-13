@@ -57,7 +57,6 @@ class AutoFontSizeLabel(QLabel):
         # 应用新字体（同时设置font和样式表）
         font.setPointSize(best_size)
         self.setFont(font)
-        print(best_size)
         
         # 关键步骤：通过样式表叠加修改（不影响其他样式）
         self.setStyleSheet(f"""

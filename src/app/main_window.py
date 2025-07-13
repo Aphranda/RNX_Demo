@@ -10,7 +10,11 @@ from PyQt5.QtCore import QRegExp
 import sys, os
 from pathlib import Path
 
+# 添加项目根目录到系统路径
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, BASE_DIR)
 
+from resources.ui.main_window_ui import MainWindowUI
 
 from .widgets.AutoFontSizeComboBox import AutoFontSizeComboBox
 from .widgets.AutoFontSizeLabel import AutoFontSizeLabel
@@ -20,28 +24,9 @@ from .widgets.StatusPanel import StatusPanel
 from .threads.StatusQueryThread import StatusQueryThread
 
 
-class MainWindow(QMainWindow):
+class MainWindow(MainWindowUI):
     def __init__(self, Communicator, SignalUnitConverter, CalibrationFileManager):
         super().__init__()
-        self.setWindowTitle("RNX Quantum Antenna Test System - Demo")
-        self.setGeometry(50, 40, 1800, 1100)
-        self.central_widget = QWidget(self)
-        self.setCentralWidget(self.central_widget)
-        self.status_bar = QStatusBar(self)
-        self.setStatusBar(self.status_bar)
-
-        #引入样式表
-        self.load_stylesheet()
-
-        # 子控件实例化
-        self.autoFontSizeLabel = AutoFontSizeLabel
-        self.autoFontSizeComboBox = AutoFontSizeComboBox
-
-        self.child_control = {
-            "Lable":self.autoFontSizeLabel,
-            "ComboBox":self.autoFontSizeComboBox
-        }
-
 
         # 初始化外部类
         self.tcp_client = Communicator
@@ -51,245 +36,53 @@ class MainWindow(QMainWindow):
         self.comm_mutex = QMutex()
         self.status_thread = None
 
-        self.cal_manager = None  # 添加这行初始化
-        self.compensation_enabled = False  # 同时初始化补偿标志
-        self.calibration_data = None  # 初始化校准数据
-
+        # 初始化状态缓存
+        self._init_status_cache()
+        
+        # 初始化控制器
+        self._init_controller()
+    
+    def _init_status_cache(self):
+        """初始化状态缓存"""
         self.status_cache = {
-            "motion": {axis: {"reach": "-", "home": "-", "speed": "-"} for axis in ["X", "KU", "K", "KA", "Z"]},
+            "motion": {axis: {"reach": "-", "home": "-", "speed": "-"} 
+                      for axis in ["X", "KU", "K", "KA", "Z"]},
             "src": {"freq": "-", "power": "-", "rf": "-"}
         }
-
-        self.init_ui()  # 只调用一次
-    
-    def load_stylesheet(self):
-        # 自动探测可能的资源位置
-        search_paths = [
-            # 开发模式路径（PyCharm/VSCode直接运行）
-            "src/resources/styles/main_window.qss",
-            # 打包后路径
-            "resources/styles/main_window.qss",
-            # 资源系统路径
-            ":/styles/main_window.qss"
-        ]
-        
-        for path in search_paths:
-            if Path(path).exists():
-                with open(path, 'r', encoding='utf-8') as f:
-                    self.setStyleSheet(f.read())
-                print(f"成功加载样式表: {path}")
-                return
-        
-        print("警告: 使用嵌入式默认样式")
-        self.setStyleSheet("QMainWindow { background: #f0f0f0; }")
-
-
-    def init_ui(self):
-        # --- 主体横向分区 ---
-        main_layout = QHBoxLayout()  # ← 这里新增
-
-        # ===== 左侧：链路图 + 日志 =====
-        left_panel = QVBoxLayout()
-        # 链路图区域
-        link_group = QGroupBox("链路图")
-        link_layout = QVBoxLayout()
-        link_group.setLayout(link_layout)
-        self.link_diagram = SimpleLinkDiagram()
-        center_layout = QHBoxLayout()
-        center_layout.addStretch()
-        center_layout.addWidget(self.link_diagram)
-        center_layout.addStretch()
-        link_layout.addLayout(center_layout)
-        left_panel.addWidget(link_group, stretch=3)
-
-        # 日志区域
-        log_group = QGroupBox("日志")
-        log_layout = QVBoxLayout()
-        log_group.setLayout(log_layout)
-        self.log_output = LogWidget()  # 使用自定义日志控件
-        log_layout.addWidget(self.log_output)
-        left_panel.addWidget(log_group, stretch=2)
-
-        main_layout.addLayout(left_panel, stretch=2)
-
-        # ===== 右侧：状态 + 控制 =====
-        right_panel = QVBoxLayout()
-
-        # 状态显示
-        status_group = QGroupBox("状态显示")
-        status_layout = QVBoxLayout()
-        status_group.setLayout(status_layout)
-        self.status_panel = StatusPanel(self.unit_converter, self.child_control)
-        status_layout.addWidget(self.status_panel)
-        right_panel.addWidget(status_group)
-
-        right_panel.addSpacing(-15)  # 减少标题与内容间距
-        # ETH设置
-        eth_group = QGroupBox()
-        eth_layout = QHBoxLayout()
-        eth_group.setLayout(eth_layout)
-        eth_layout.addWidget(QLabel("ETH IP:"))
-        self.eth_ip_input = QLineEdit()
-        self.eth_ip_input.setPlaceholderText("192.168.1.11")
-        eth_layout.addWidget(self.eth_ip_input)
-        eth_layout.addWidget(QLabel("Port:"))
-        self.eth_port_input = QLineEdit()
-        self.eth_port_input.setPlaceholderText("7")
-        eth_layout.addWidget(self.eth_port_input)
-        self.eth_connect_btn = QPushButton("连接")
-        self.eth_connect_btn.clicked.connect(self.connect_eth)
-        eth_layout.addWidget(self.eth_connect_btn)
-        # 新增断开连接按钮
-        self.eth_disconnect_btn = QPushButton("断开连接")
-        self.eth_disconnect_btn.clicked.connect(self.disconnect_eth)
-        eth_layout.addWidget(self.eth_disconnect_btn)
-
-        # 新增频率与馈源联动单选框
-        self.freq_feed_link_check = QCheckBox("频率联动")
-        self.freq_feed_link_check.setChecked(False)  # 默认不选中
-        eth_layout.addWidget(self.freq_feed_link_check)
-
-        self.freq_feed_link_check.stateChanged.connect(self._on_freq_link_state_changed)
+        self.compensation_enabled = False
+        self.calibration_data = None
+        self.cal_manager = None
         self.current_feed_mode = None
         self._is_freq_link_connected = False
-
-        eth_layout.addStretch()
-        right_panel.addWidget(eth_group)
-        
-        # 链路控制
-        link_ctrl_group = QGroupBox("链路控制")
-        link_ctrl_layout = QHBoxLayout()
-        link_ctrl_group.setLayout(link_ctrl_layout)
-        self.link_mode_combo = QComboBox()
-        self.link_mode_combo.addItems([
-            "FEED_X_THETA", "FEED_X_PHI", "FEED_KU_THETA", "FEED_KU_PHI",
-            "FEED_K_THETA", "FEED_K_PHI", "FEED_KA_THETA", "FEED_KA_PHI"
-        ])
-        link_ctrl_layout.addWidget(QLabel("链路模式:"))
-        link_ctrl_layout.addWidget(self.link_mode_combo)
-        self.link_set_btn = QPushButton("设置链路")
+    
+    def _init_controller(self):
+        """初始化控制器逻辑"""
+        # 连接信号与槽
+        self.eth_connect_btn.clicked.connect(self.connect_eth)
+        self.eth_disconnect_btn.clicked.connect(self.disconnect_eth)
+        self.freq_feed_link_check.stateChanged.connect(self._on_freq_link_state_changed)
         self.link_set_btn.clicked.connect(self.send_link_cmd)
-        link_ctrl_layout.addWidget(self.link_set_btn)
-        self.link_query_btn = QPushButton("查询链路")
         self.link_query_btn.clicked.connect(self.query_link_cmd)
-        link_ctrl_layout.addWidget(self.link_query_btn)
-        right_panel.addWidget(link_ctrl_group)
-
-        # 新增：校准文件加载
-        self.status_panel.load_cal_btn.clicked.connect(self.load_calibration_file)
-
-
-        # 信号源控制
-        src_group = QGroupBox("信号源控制")
-        src_layout = QGridLayout()
-        src_group.setLayout(src_layout)
-
-        src_layout.addWidget(QLabel("信号频率:"), 0, 0)
-        self.freq_input = QLineEdit()
-        self.freq_input.setPlaceholderText("如 8GHz")
-        src_layout.addWidget(self.freq_input, 0, 1,1,2)
-        self.freq_btn = QPushButton("设置频率")
         self.freq_btn.clicked.connect(self.send_freq_cmd)
-        src_layout.addWidget(self.freq_btn, 0, 3)
-        self.freq_query_btn = QPushButton("查询频率")
         self.freq_query_btn.clicked.connect(self.query_freq_cmd)
-        src_layout.addWidget(self.freq_query_btn, 0, 4)
-
-        src_layout.addWidget(QLabel("馈源功率:"), 1, 0)
-        self.power_input = QLineEdit()
-        self.power_input.setPlaceholderText("如 -40dBm")
-        src_layout.addWidget(self.power_input, 1, 1)
-
-        self.raw_power_input = QLineEdit()
-        self.raw_power_input.setPlaceholderText("信号源实际输出")
-        src_layout.addWidget(self.raw_power_input,1,2)
-
-        self.power_btn = QPushButton("设置功率")
         self.power_btn.clicked.connect(self.send_power_cmd)
-        src_layout.addWidget(self.power_btn, 1, 3)
-        self.power_query_btn = QPushButton("查询功率")
         self.power_query_btn.clicked.connect(self.query_power_cmd)
-        src_layout.addWidget(self.power_query_btn, 1, 4)
-
-        src_layout.addWidget(QLabel("RF输出:"), 2, 0)
-        self.output_combo = QComboBox()
-        self.output_combo.addItems(["ON", "OFF"])
-        src_layout.addWidget(self.output_combo, 2, 1,0,2)
-        self.output_btn = QPushButton("设置输出")
         self.output_btn.clicked.connect(self.send_output_cmd)
-        src_layout.addWidget(self.output_btn, 2, 3)
-        self.output_query_btn = QPushButton("查询输出")
         self.output_query_btn.clicked.connect(self.query_output_cmd)
-        src_layout.addWidget(self.output_query_btn, 2, 4)
-
-        right_panel.addWidget(src_group)
-
-        # 连接信号槽（使用textChanged而不是textEdited以获得实时响应）
+        self.home_btn.clicked.connect(self.send_home_cmd)
+        self.home_query_btn.clicked.connect(self.query_home_cmd)
+        self.feed_btn.clicked.connect(self.send_feed_cmd)
+        self.feed_query_btn.clicked.connect(self.query_feed_cmd)
+        self.speed_btn.clicked.connect(self.send_speed_cmd)
+        self.speed_query_btn.clicked.connect(self.query_speed_cmd)
+        self.status_panel.load_cal_btn.clicked.connect(self.load_calibration_file)
         self.power_input.textChanged.connect(self.on_power_input_changed)
         self.raw_power_input.textChanged.connect(self.on_raw_power_input_changed)
-
-        # 添加输入验证器
-        self.power_validator = QRegExpValidator(QRegExp(r"^-?\d+\.?\d*\s*(dBm)?$"), self.power_input)
-        self.raw_power_validator = QRegExpValidator(QRegExp(r"^-?\d+\.?\d*\s*(dBm)?$"), self.raw_power_input)
-        self.power_input.setValidator(self.power_validator)
-        self.raw_power_input.setValidator(self.raw_power_validator)
-
-        # 运动控制
-        self.motion_group = QGroupBox("运动控制")
-        motion_layout = QGridLayout()
-        self.motion_group.setLayout(motion_layout)
-        motion_layout.addWidget(QLabel("复位:"), 0, 0)
-        self.home_combo = QComboBox()
-        self.home_combo.addItems(["X", "KU", "K", "KA", "ALL"])
-        motion_layout.addWidget(self.home_combo, 0, 1)
-        self.home_btn = QPushButton("执行复位")
-        self.home_btn.clicked.connect(self.send_home_cmd)
-        motion_layout.addWidget(self.home_btn, 0, 2)
-        self.home_query_btn = QPushButton("查询复位")
-        self.home_query_btn.clicked.connect(self.query_home_cmd)
-        motion_layout.addWidget(self.home_query_btn, 0, 3)
-        motion_layout.addWidget(QLabel("达位:"), 1, 0)
-        self.feed_combo = QComboBox()
-        self.feed_combo.addItems(["X", "KU", "K", "KA"])
-        motion_layout.addWidget(self.feed_combo, 1, 1)
-        self.feed_btn = QPushButton("执行达位")
-        self.feed_btn.clicked.connect(self.send_feed_cmd)
-        motion_layout.addWidget(self.feed_btn, 1, 2)
-        self.feed_query_btn = QPushButton("查询达位")
-        self.feed_query_btn.clicked.connect(self.query_feed_cmd)
-        motion_layout.addWidget(self.feed_query_btn, 1, 3)
-        motion_layout.addWidget(QLabel("速度:"), 2, 0)
-        # 交换顺序：先模组名称，再挡位
-        self.speed_mod_combo = QComboBox()
-        self.speed_mod_combo.addItems(["X", "KU", "K", "KA","Z"])
-        motion_layout.addWidget(self.speed_mod_combo, 2, 1)
-        self.speed_combo = QComboBox()
-        self.speed_combo.addItems(["LOW", "MID1", "MID2", "MID3", "HIGH"])
-        motion_layout.addWidget(self.speed_combo, 2, 2)
-        self.speed_btn = QPushButton("设置速度")
-        self.speed_btn.clicked.connect(self.send_speed_cmd)
-        motion_layout.addWidget(self.speed_btn, 2, 3)
-        self.speed_query_btn = QPushButton("查询速度")
-        self.speed_query_btn.clicked.connect(self.query_speed_cmd)
-        motion_layout.addWidget(self.speed_query_btn, 2, 4)
-        right_panel.addWidget(self.motion_group)
-
-        main_layout.addLayout(right_panel, stretch=3)
-
-        # # --- 标题 ---
-        # title = QLabel("RNX量子天线测试系统控制Demo", self)
-        # title.setFont(QFont("Microsoft YaHei", 10, QFont.Bold))
-        # title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        # 用一个总的垂直布局包裹标题和主布局
-        layout = QVBoxLayout()
-        # layout.addWidget(title)
-        layout.addLayout(main_layout)
-        self.central_widget.setLayout(layout)  # ← 这里设置布局
-
+        
         # 状态栏初始信息
         self.show_status("系统就绪。")
         self.log("系统启动。", "INFO")
+
 
     # --- 日志方法 ---
     def log(self, message, level="INFO"):

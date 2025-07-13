@@ -19,10 +19,12 @@ import math
 from typing import Dict, List, Optional, Tuple, Union
 from datetime import datetime, timezone
 
-
+from widgets.AutoFontSizeComboBox import AutoFontSizeComboBox
+from widgets.AutoFontSizeLabel import AutoFontSizeLabel
+from utils.SignalUnitConverter import SignalUnitConverter
 
 class StatusPanel(QWidget):
-    def __init__(self, SignalUnitConverter, child_control, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumWidth(240)
         h_layout = QHBoxLayout(self)
@@ -30,10 +32,7 @@ class StatusPanel(QWidget):
         h_layout.setSpacing(10)
 
         # 单位换算实例化
-        self.unit_converter = SignalUnitConverter
-        AutoFontSizeLabel = child_control["Lable"]
-        AutoFontSizeComboBox = child_control["ComboBox"]
-
+        self.unit_converter = SignalUnitConverter()
 
         # 运动模组状态（独立外框）
         motion_group = QGroupBox("运动模组状态")
