@@ -6,7 +6,7 @@ class AutoFontSizeLabel(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._min_font_size = 6
-        self._max_font_size = 72  # 增大最大值
+        self._max_font_size = 32  # 增大最大值
         self._content_margin = 10  # 增加边距
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setProperty("class", "AutoFontSizeLabel")
@@ -57,6 +57,7 @@ class AutoFontSizeLabel(QLabel):
         # 应用新字体（同时设置font和样式表）
         font.setPointSize(best_size)
         self.setFont(font)
+        print(best_size)
         
         # 关键步骤：通过样式表叠加修改（不影响其他样式）
         self.setStyleSheet(f"""

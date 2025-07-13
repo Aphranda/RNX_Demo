@@ -1,9 +1,10 @@
+
+```
 RNX_Demo
-├─ 📁build
+├─ 📁.vscode
 ├─ 📁calibrations
 │  ├─ 📁archive
 │  └─ 📁backup
-├─ 📁dist
 ├─ 📁docs
 │  ├─ 📄RNX量子天线测试系统指令表.md
 │  ├─ 📄RNX量子天线测试系统指令表.pdf
@@ -21,7 +22,9 @@ RNX_Demo
 │  │  │  ├─ 📄message_bus.py
 │  │  │  └─ 📄tcp_client.py
 │  │  ├─ 📁dialogs
+│  │  │  └─ 📄__init__.py
 │  │  ├─ 📁models
+│  │  │  └─ 📄__init__.py
 │  │  ├─ 📁threads
 │  │  │  ├─ 📁__pycache__
 │  │  │  └─ 📄StatusQueryThread.py
@@ -41,16 +44,17 @@ RNX_Demo
 │  │  └─ 📄main_window.py
 │  ├─ 📁resources
 │  │  ├─ 📁icons
+│  │  │  └─ 📄icon_RNX_01.ico
 │  │  ├─ 📁styles
+│  │  │  └─ 📄main_window.qss
 │  │  ├─ 📁ui
+│  │  │  └─ 📄ui.py
 │  │  └─ 📄resources.qrc
 │  ├─ 📁test
+│  │  ├─ 📄RNX_Demo.py
 │  │  └─ 📄test_mian.py
 │  ├─ 📄.mian.py.lock
 │  └─ 📄mian.py
 ├─ 📄.gitignore
-├─ 📄.RNX_Demo.py.lock
-├─ 📄icon_RNX_01.ico
-├─ 📄readme.md
-└─ 📄RNX_Demo.py
+└─ 📄readme.md
 ```

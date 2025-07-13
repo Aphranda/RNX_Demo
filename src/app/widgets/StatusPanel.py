@@ -122,7 +122,7 @@ class StatusPanel(QWidget):
         self.src_grid.addWidget(self.power_unit_combo, 2, 2)
 
         self.src_grid.addWidget(QLabel("RF输出:"), 3, 0)
-        self.src_rf = QLabel("-")
+        self.src_rf = AutoFontSizeLabel()
         self.src_rf.setProperty("statusValue", True)
         self.src_grid.addWidget(self.src_rf, 3, 1)
 

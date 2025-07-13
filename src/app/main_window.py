@@ -8,7 +8,9 @@ from PyQt5.QtCore import Qt, QMutex, QFile,QTextStream
 from PyQt5.QtGui import QRegExpValidator
 from PyQt5.QtCore import QRegExp
 import sys, os
-from pathlib import Path  # 必须添加这行导入
+from pathlib import Path
+
+
 
 from .widgets.AutoFontSizeComboBox import AutoFontSizeComboBox
 from .widgets.AutoFontSizeLabel import AutoFontSizeLabel
@@ -17,7 +19,6 @@ from .widgets.SimpleLinkDiagram import SimpleLinkDiagram
 from .widgets.StatusPanel import StatusPanel
 from .threads.StatusQueryThread import StatusQueryThread
 
-from app.utils import SignalUnitConverter
 
 class MainWindow(QMainWindow):
     def __init__(self, Communicator, SignalUnitConverter, CalibrationFileManager):
@@ -541,6 +542,7 @@ class MainWindow(QMainWindow):
         if self.cal_manager is None:
             self.cal_manager = self.calibrationFileManager(log_callback=self.log)
     
+            # self.cal_manager.generate_default_calibration()
         # 获取最近校准文件目录
         cal_dir = "calibrations"  # 默认目录
         if hasattr(self, 'cal_manager'):
