@@ -2,7 +2,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QToolBar, QTextEdit, QComboBox, 
     QLabel, QAction, QLineEdit, QMenu, QFileDialog
 )
-from PyQt5.QtGui import QTextCursor, QTextCharFormat, QColor, QFont, QIcon
+from PyQt5.QtGui import QTextCursor, QTextCharFormat, QColor, QFont, QIcon,QTextDocument
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from datetime import datetime
 import sys
@@ -41,6 +41,19 @@ class LogWidget(QWidget):
         self._init_settings(default_level)
         self._connect_signals()
 
+        # 继承父样式 + 自定义扩展
+        base_style = parent.styleSheet() if parent else ""
+        self.setStyleSheet(base_style + """
+            /* 日志控件特有样式 */
+            QTextEdit {
+                font-family: Consolas;
+                font-size: 10pt;
+            }
+            QToolBar {
+                spacing: 5px;
+            }
+        """)
+
     def _setup_ui(self):
         """初始化UI组件"""
         # 主布局
@@ -65,6 +78,8 @@ class LogWidget(QWidget):
         """初始化工具栏"""
         self.toolbar = QToolBar()
         self.toolbar.setMovable(False)
+
+
 
         # 日志级别过滤
         self.level_combo = QComboBox()
@@ -104,12 +119,22 @@ class LogWidget(QWidget):
         self.clear_action = QAction(QIcon.fromTheme("edit-clear"), "清空", self)
         self.toolbar.addAction(self.clear_action)
 
+        # 为每个动作设置对象名称以便样式表选择
+        self.search_action.setObjectName("search_action")
+        self.clear_action.setObjectName("clear_action")
+        self.timestamp_action.setObjectName("timestamp_action")
+        self.wrap_action.setObjectName("wrap_action")
+
     def _init_settings(self, default_level):
         """初始化默认设置"""
         self.current_level = default_level
         self.enabled_levels = set(self.LEVELS.keys())
         self._highlight_format = QTextCharFormat()
-        self._highlight_format.setBackground(QColor("#FFFF00"))
+        # 修改为半透明黄色背景，黑色文字
+        self._highlight_format.setBackground(QColor(255, 255, 0, 100))  # 半透明黄色
+        self._highlight_format.setForeground(QColor(0, 0, 0))  # 黑色文字
+        self._highlight_format.setFontWeight(QFont.Bold)  # 加粗
+
 
     def _connect_signals(self):
         """连接信号与槽"""
@@ -129,13 +154,16 @@ class LogWidget(QWidget):
             self.text_edit.verticalScrollBar().value() == self.text_edit.verticalScrollBar().maximum())
         )
 
+        # 改进的滚动条检测
+        scroll_bar = self.text_edit.verticalScrollBar()
+        scroll_bar.valueChanged.connect(
+            lambda: setattr(self, "_auto_scroll", 
+            abs(scroll_bar.value() - scroll_bar.maximum()) < 10)  # 允许10像素的误差
+        )
+
     # -------------------- 核心功能 --------------------
     def log(self, message, level="INFO"):
-        """
-        记录日志
-        :param message: 日志消息
-        :param level: 日志级别 (DEBUG/INFO/SUCCESS/WARNING/ERROR/CRITICAL/SEND/RECV)
-        """
+        """记录日志"""
         if level not in self.LEVELS or level not in self.enabled_levels:
             return
 
@@ -152,9 +180,11 @@ class LogWidget(QWidget):
         cursor.movePosition(QTextCursor.End)
         cursor.insertHtml(" ".join(html) + "<br>")
         
-        # 自动滚动
+        # 优化后的自动滚动逻辑
         if self._auto_scroll:
-            self.text_edit.ensureCursorVisible()
+            scroll_bar = self.text_edit.verticalScrollBar()
+            # 使用定时器确保滚动操作在UI更新后执行
+            QTimer.singleShot(10, lambda: scroll_bar.setValue(scroll_bar.maximum()))
         
         # 限制最大行数
         if self.text_edit.document().blockCount() > self.max_lines:
@@ -191,25 +221,94 @@ class LogWidget(QWidget):
         self.text_edit.setLineWrapMode(QTextEdit.WidgetWidth if enabled else QTextEdit.NoWrap)
 
     def _search_text(self):
-        """搜索文本并高亮"""
-        text = self.search_edit.text().strip()
-        if not text:
+        """精确搜索文本并高亮定位"""
+        search_str = self.search_edit.text().strip()
+        if not search_str:
             return
         
-        # 清除旧的高亮
+        # 清除旧高亮
         self._clear_highlights()
         
-        # 搜索并高亮
-        cursor = self.text_edit.document().find(text)
-        while not cursor.isNull():
-            cursor.mergeCharFormat(self._highlight_format)
-            cursor = self.text_edit.document().find(text, cursor)
+        # 获取文档和当前光标
+        doc = self.text_edit.document()
+        cursor = self.text_edit.textCursor()
+        
+        # 设置搜索选项（区分大小写）
+        options = QTextDocument.FindCaseSensitively
+        
+        # 第一次搜索：从当前位置到文档末尾
+        found_cursor = doc.find(search_str, cursor, options)
+        
+        # 第二次搜索：如果没找到，从文档开头再搜索
+        if found_cursor.isNull():
+            cursor = QTextCursor(doc)
+            found_cursor = doc.find(search_str, cursor, options)
+            if found_cursor.isNull():
+                self.log(f"未找到: {search_str}", "WARNING")
+                return
+        
+        # 高亮所有匹配项
+        self._highlight_all_matches(search_str, options)
+        
+        # 精确定位到匹配项
+        self._precise_positioning(found_cursor)
+
+    def _highlight_all_matches(self, search_str, options):
+        """高亮所有匹配文本"""
+        doc = self.text_edit.document()
+        cursor = QTextCursor(doc)
+        
+        format = QTextCharFormat()
+        format.setBackground(QColor(255, 255, 0, 100))  # 半透明黄色
+        format.setFontWeight(QFont.Bold)
+        
+        while True:
+            cursor = doc.find(search_str, cursor, options)
+            if cursor.isNull():
+                break
+            cursor.mergeCharFormat(format)
+
+    def _precise_positioning(self, cursor):
+        """精确滚动到匹配位置"""
+        self.text_edit.setTextCursor(cursor)
+        
+        # 确保匹配内容在视图中居中显示
+        self.text_edit.ensureCursorVisible()
+        
+        # 获取光标矩形并计算滚动位置
+        cursor_rect = self.text_edit.cursorRect(cursor)
+        print(cursor_rect)
+        scroll_pos = cursor_rect.center().y() + 100
+        print(scroll_pos)
+        
+        # 平滑滚动到目标位置
+        self.text_edit.verticalScrollBar().setValue(scroll_pos)
+        
+        # 可选：短暂聚焦匹配行
+        extra_selection = QTextEdit.ExtraSelection()
+        extra_selection.cursor = cursor
+        extra_selection.format.setBackground(QColor(173, 216, 230, 100))  # 淡蓝色
+        self.text_edit.setExtraSelections([extra_selection])
+
 
     def _clear_highlights(self):
         """清除所有高亮"""
         cursor = self.text_edit.textCursor()
-        cursor.select(QTextCursor.Document)
-        cursor.setCharFormat(QTextCharFormat())
+        original_position = cursor.position()
+        
+        # 选择整个文档
+        cursor.movePosition(QTextCursor.Start)
+        cursor.movePosition(QTextCursor.End, QTextCursor.KeepAnchor)
+        
+        # 重置背景色但保留其他格式
+        format = QTextCharFormat()
+        format.setBackground(Qt.transparent)
+        cursor.mergeCharFormat(format)
+        
+        # 恢复原始光标位置
+        cursor.setPosition(original_position)
+        self.text_edit.setTextCursor(cursor)
+
 
     # -------------------- 右键菜单 --------------------
     def _show_context_menu(self, pos):

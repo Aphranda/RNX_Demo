@@ -1,0 +1,318 @@
+QMainWindow {
+    background: #f7f7f7;
+}
+/* 新增QCheckBox样式 */
+QCheckBox {
+    spacing: 8px;
+    font-size: 24px;
+    font-weight: bold;
+    color: #222;
+}
+QCheckBox::indicator {
+    width: 24px;
+    height: 24px;
+    border: 2px solid #b0b0b0;
+    border-radius: 4px;
+    background: #f9f9f9;
+}
+QCheckBox::indicator:checked {
+    background: #1976d2;
+    border: 2px solid #1976d2;
+    image: url(:/qss_icons/rc/checkbox_checked.png);
+}
+QCheckBox::indicator:unchecked:hover {
+    border: 2px solid #64b5f6;
+}
+QCheckBox::indicator:checked:hover {
+    background: #1565c0;
+    border: 2px solid #1565c0;
+}
+QGroupBox {
+    border: 2px solid #e0e0e0;
+    border-radius: 14px;
+    margin-top: 15px;
+    background: #ffffff;
+    font-weight: bold;
+    font-size: 24px;
+    color: #222;
+    padding: 8px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    top: 6px;
+    padding: 0 8px 0 8px;
+    color: #42a5f5;
+    font-size: 20px;
+    font-weight: bold;
+}
+QLabel[panelTitle="true"] {
+    color: #42a5f5;
+    font-size: 24px;
+    font-weight: bold;
+}
+QLabel {
+    font-size: 24px;
+    color: #222;
+    font-weight: bold;
+}
+QLabel[statusValue="true"] {
+    border: 2px solid #42a5f5;
+    border-radius: 8px;
+    background: #f5faff;
+    padding: 4px 10px;
+    min-width: 60px;
+    min-height: 24px;
+    font-size: 24px;
+    font-weight: bold;
+    color: #42a5f5;
+}
+QLabel[AutoScale="true"]:not(AutoFontSizeLabel) {
+    border: 2px solid #42a5f5;
+    border-radius: 8px;
+    background: #f5faff;
+    padding: 4px 10px;
+    min-width: 60px;
+    min-height: 24px;
+    font-weight: bold;
+    color: #42a5f5;
+}
+QLineEdit, QTextEdit {
+    border: 2px solid #b0b0b0;
+    border-radius: 8px;
+    padding: 6px 10px;
+    background: #f9f9f9;
+    font-size: 24px;
+    min-height: 28px;
+    font-weight: bold;
+}
+QComboBox {
+    border: 2px solid #b0b0b0;
+    border-radius: 8px;
+    padding: 4px 8px 4px 8px;
+    background: #f9f9f9;
+    font-size: 24px;
+    min-height: 28px;
+    font-weight: bold;
+}
+QPushButton {
+    background: #1976d2;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 18px;
+    font-size: 24px;
+    font-weight: bold;
+    min-height: 32px;
+}
+QPushButton:hover {
+    background: #1565c0;
+}
+QPushButton:pressed {
+    background: #0d47a1;
+}
+QPushButton:hover {
+    background: #64b5f6;
+}
+QPushButton:pressed {
+    background: #42a5f5;
+}
+QStatusBar {
+    background: #f1f1f1;
+    color: #42a5f5;
+    font-size: 24px;
+    font-weight: bold;
+}
+/* 禁用状态样式 */
+QGroupBox:disabled {
+    border: 2px solid #b0b0b0;
+    background: #f0f0f0;
+    color: #a0a0a0;
+}
+QGroupBox:disabled::title {
+    color: #a0a0a0;
+}
+QPushButton:disabled {
+    background: #e0e0e0;
+    color: #a0a0a0;
+}
+QComboBox:disabled {
+    background: #e0e0e0;
+    color: #a0a0a0;
+}
+QLabel:disabled {
+    color: #a0a0a0;
+}
+/* 日志控件全局样式 */
+LogWidget {
+    /* 只保留有效属性 */
+    background: transparent;
+}
+
+LogWidget QTextEdit {
+    background: #e0e0e0;
+    color: #e0e0e0;
+    selection-background-color: #3d3d3d;
+}
+
+LogWidget QToolBar {
+    font-size: 16px;
+    background: #e0e0e0;
+    border: none;
+}
+
+LogWidget QComboBox {
+    min-width: 60px;
+}
+
+LogWidget QLabel {
+    font-size: 16px;
+    color: #222;
+    font-weight: bold;
+}
+LogWidget QPushButton {
+    background: #1976d2;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 18px;
+    font-size: 10px;
+    font-weight: bold;
+    min-height: 32px;
+}
+LogWidget QPushButton:hover {
+    background: #1565c0;
+}
+LogWidget QPushButton:pressed {
+    background: #0d47a1;
+}
+LogWidget QPushButton:hover {
+    background: #64b5f6;
+}
+LogWidget QPushButton:pressed {
+    background: #42a5f5;
+}
+
+/* 新增QCheckBox样式 */
+LogWidget QCheckBox {
+    spacing: 8px;
+    font-size: 10px;
+    font-weight: bold;
+    color: #222;
+}
+LogWidget QCheckBox::indicator {
+    width: 24px;
+    height: 24px;
+    border: 2px solid #b0b0b0;
+    border-radius: 4px;
+    background: #f9f9f9;
+}
+LogWidget QCheckBox::indicator:checked {
+    background: #1976d2;
+    border: 2px solid #1976d2;
+    image: url(:/qss_icons/rc/checkbox_checked.png);
+}
+
+LogWidget QComboBox {
+    border: 2px solid #b0b0b0;
+    border-radius: 8px;
+    padding: 4px 8px 4px 8px;
+    background: #f9f9f9;
+    font-size: 16px;
+    min-height: 20px;
+    font-weight: bold;
+}
+
+LogWidget QLineEdit {
+    border: 2px solid #b0b0b0;
+    border-radius: 8px;
+    padding: 6px 10px;
+    background: #f9f9f9;
+    font-size: 16px;
+    min-height: 20px;
+    font-weight: bold;
+}
+/* 工具栏动作按钮样式 */
+LogWidget QToolButton {
+    background-color: #e1f5fe;
+    border: 1px solid #4fc3f7;
+    border-radius: 4px;
+    min-width: 24px;
+    min-height: 24px;
+    padding: 2px;
+    margin: 0 2px;
+}
+
+LogWidget QToolButton:hover {
+    background-color: #b3e5fc;
+}
+
+LogWidget QToolButton:pressed {
+    background-color: #4fc3f7;
+}
+
+/* 搜索动作特殊样式 */
+LogWidget #search_action {
+    qproperty-icon: url(:/icons/search.svg);
+    background-color: #e8f5e9;
+    border-color: #81c784;
+}
+
+LogWidget #search_action:hover {
+    background-color: #c8e6c9;
+}
+
+LogWidget #search_action:pressed {
+    background-color: #81c784;
+}
+
+/* 清空动作特殊样式 */
+LogWidget #clear_action {
+    qproperty-icon: url(:/icons/clear.svg);
+    background-color: #ffebee;
+    border-color: #e57373;
+}
+
+LogWidget #clear_action:hover {
+    background-color: #ffcdd2;
+}
+
+LogWidget #clear_action:pressed {
+    background-color: #e57373;
+}
+
+/* 时间戳动作特殊样式 */
+LogWidget #timestamp_action {
+    qproperty-icon: url(:/icons/clock.svg);
+    background-color: #e3f2fd;
+    border-color: #64b5f6;
+}
+
+LogWidget #timestamp_action:hover {
+    background-color: #bbdefb;
+}
+
+LogWidget #timestamp_action:pressed {
+    background-color: #64b5f6;
+}
+
+/* 自动换行动作特殊样式 */
+LogWidget #wrap_action {
+    qproperty-icon: url(:/icons/wrap.svg);
+    background-color: #f3e5f5;
+    border-color: #ba68c8;
+}
+
+LogWidget #wrap_action:hover {
+    background-color: #e1bee7;
+}
+
+LogWidget #wrap_action:pressed {
+    background-color: #ba68c8;
+}
+
+/* 选中状态的样式 */
+LogWidget QToolButton:checked {
+    background-color: #4fc3f7;
+    border-color: #0288d1;
+}

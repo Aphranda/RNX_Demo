@@ -4,10 +4,11 @@ from PyQt5.QtWidgets import (
     QPushButton, QLabel, QComboBox, QLineEdit, QTextEdit, QGroupBox, QGridLayout, 
     QSizePolicy, QMessageBox, QCheckBox, QToolBar, QAction, QFileDialog
 )
-from PyQt5.QtCore import Qt, QMutex
+from PyQt5.QtCore import Qt, QMutex, QFile,QTextStream
 from PyQt5.QtGui import QRegExpValidator
 from PyQt5.QtCore import QRegExp
 import sys, os
+from pathlib import Path  # 必须添加这行导入
 
 from .widgets.AutoFontSizeComboBox import AutoFontSizeComboBox
 from .widgets.AutoFontSizeLabel import AutoFontSizeLabel
@@ -27,7 +28,9 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.central_widget)
         self.status_bar = QStatusBar(self)
         self.setStatusBar(self.status_bar)
-        self.apply_flat_style()  # 应用Fluent样式
+
+        #引入样式表
+        self.load_stylesheet()
 
         # 子控件实例化
         self.autoFontSizeLabel = AutoFontSizeLabel
@@ -58,155 +61,27 @@ class MainWindow(QMainWindow):
 
         self.init_ui()  # 只调用一次
     
-    def apply_flat_style(self):
-        # Fluent Design风格主色，适配宽屏，控件高度和间距缩小
-        self.setStyleSheet("""
-            QMainWindow {
-                background: #f7f7f7;
-            }
-            /* 新增QCheckBox样式 */
-            QCheckBox {
-                spacing: 8px;
-                font-size: 24px;
-                font-weight: bold;
-                color: #222;
-            }
-            QCheckBox::indicator {
-                width: 24px;
-                height: 24px;
-                border: 2px solid #b0b0b0;
-                border-radius: 4px;
-                background: #f9f9f9;
-            }
-            QCheckBox::indicator:checked {
-                background: #1976d2;
-                border: 2px solid #1976d2;
-                image: url(:/qss_icons/rc/checkbox_checked.png);
-            }
-            QCheckBox::indicator:unchecked:hover {
-                border: 2px solid #64b5f6;
-            }
-            QCheckBox::indicator:checked:hover {
-                background: #1565c0;
-                border: 2px solid #1565c0;
-            }
-            QGroupBox {
-                border: 2px solid #e0e0e0;
-                border-radius: 14px;
-                margin-top: 15px;
-                background: #ffffff;
-                font-weight: bold;
-                font-size: 24px;
-                color: #222;
-                padding: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 12px;
-                top: 6px;
-                padding: 0 8px 0 8px;
-                color: #42a5f5;
-                font-size: 20px;
-                font-weight: bold;
-            }
-            QLabel[panelTitle="true"] {
-                color: #42a5f5;
-                font-size: 24px;
-                font-weight: bold;
-            }
-            QLabel {
-                font-size: 24px;
-                color: #222;
-                font-weight: bold;
-            }
-            QLabel[statusValue="true"] {
-                border: 2px solid #42a5f5;
-                border-radius: 8px;
-                background: #f5faff;
-                padding: 4px 10px;
-                min-width: 60px;
-                min-height: 24px;
-                font-size: 24px;
-                font-weight: bold;
-                color: #42a5f5;
-            }
-            QLabel[AutoScale="true"]:not(AutoFontSizeLabel) {
-                border: 2px solid #42a5f5;
-                border-radius: 8px;
-                background: #f5faff;
-                padding: 4px 10px;
-                min-width: 60px;
-                min-height: 24px;
-                font-weight: bold;
-                color: #42a5f5;
-            }
-            QLineEdit, QTextEdit {
-                border: 2px solid #b0b0b0;
-                border-radius: 8px;
-                padding: 6px 10px;
-                background: #f9f9f9;
-                font-size: 24px;
-                min-height: 28px;
-                font-weight: bold;
-            }
-            QComboBox {
-                border: 2px solid #b0b0b0;
-                border-radius: 8px;
-                padding: 4px 8px 4px 8px;
-                background: #f9f9f9;
-                font-size: 24px;
-                min-height: 28px;
-                font-weight: bold;
-            }
-            QPushButton {
-                background: #1976d2;
-                color: #fff;
-                border: none;
-                border-radius: 8px;
-                padding: 6px 18px;
-                font-size: 24px;
-                font-weight: bold;
-                min-height: 32px;
-            }
-            QPushButton:hover {
-                background: #1565c0;
-            }
-            QPushButton:pressed {
-                background: #0d47a1;
-            }
-            QPushButton:hover {
-                background: #64b5f6;
-            }
-            QPushButton:pressed {
-                background: #42a5f5;
-            }
-            QStatusBar {
-                background: #f1f1f1;
-                color: #42a5f5;
-                font-size: 24px;
-                font-weight: bold;
-            }
-            /* 禁用状态样式 */
-            QGroupBox:disabled {
-                border: 2px solid #b0b0b0;
-                background: #f0f0f0;
-                color: #a0a0a0;
-            }
-            QGroupBox:disabled::title {
-                color: #a0a0a0;
-            }
-            QPushButton:disabled {
-                background: #e0e0e0;
-                color: #a0a0a0;
-            }
-            QComboBox:disabled {
-                background: #e0e0e0;
-                color: #a0a0a0;
-            }
-            QLabel:disabled {
-                color: #a0a0a0;
-            }
-        """)
+    def load_stylesheet(self):
+        # 自动探测可能的资源位置
+        search_paths = [
+            # 开发模式路径（PyCharm/VSCode直接运行）
+            "src/resources/styles/main_window.qss",
+            # 打包后路径
+            "resources/styles/main_window.qss",
+            # 资源系统路径
+            ":/styles/main_window.qss"
+        ]
+        
+        for path in search_paths:
+            if Path(path).exists():
+                with open(path, 'r', encoding='utf-8') as f:
+                    self.setStyleSheet(f.read())
+                print(f"成功加载样式表: {path}")
+                return
+        
+        print("警告: 使用嵌入式默认样式")
+        self.setStyleSheet("QMainWindow { background: #f0f0f0; }")
+
 
     def init_ui(self):
         # --- 主体横向分区 ---

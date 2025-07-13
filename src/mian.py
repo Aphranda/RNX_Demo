@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QSizePolicy, QMessageBox, QCheckBox, QToolBar, QAction, QFileDialog
 )
 from PyQt5.QtGui import QFont, QColor, QPainter, QPen, QFontMetrics, QTextCursor, QTextCharFormat, QIcon
-from PyQt5.QtCore import Qt, QPointF, QThread, pyqtSignal, QMutex
+from PyQt5.QtCore import Qt, QPointF, QThread, pyqtSignal, QMutex, QDir
 from PyQt5.QtGui import QRegExpValidator
 from PyQt5.QtCore import QRegExp
 import sys, os, psutil
@@ -40,6 +40,9 @@ if __name__ == "__main__":
     
     # 正常启动主程序
     app = QApplication(sys.argv)
+
+    # 初始化资源系统
+    QDir.addSearchPath('resources', 'resources')  # 添加资源搜索路径
     
     # 设置应用程序名称（用于任务管理器识别）
     app.setApplicationName("RNX Quantum Antenna Test System")
