@@ -6,7 +6,7 @@ from .Controller import StatusPanelController
 class StatusPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        
+
         # MVC组件初始化
         self._view = StatusPanelView()
         self._model = StatusPanelModel()
@@ -38,9 +38,9 @@ class StatusPanel(QWidget):
     def update_src_status(self, status: dict):
         self._controller.update_src_status(status)
 
-    def update_operation_status(self, operation: str, axis: str):
+    def update_operation_status(self, status:dict):
         """更新操作状态显示"""
-        self._controller.update_operation_status(operation, axis)
+        self._controller.update_operation_status(status)
 
     # 属性访问器
     @property

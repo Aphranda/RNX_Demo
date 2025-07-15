@@ -501,8 +501,79 @@ class MainWindow(MainWindowUI):
         if not val:
             self.show_status("请输入频率参数")
             return
+        
+        # 发送频率设置命令
         cmd = f"SOURce:FREQuency {val}"
         self.send_and_log(cmd)
+        
+        # 频率联动逻辑
+        if self._is_freq_link_connected:
+            self._control_feed_for_frequency(val)
+
+    def _control_feed_for_frequency(self, freq_str):
+        """根据频率控制对应的馈源轴"""
+        try:
+            # 解析频率值
+            freq_ghz = float(freq_str.replace("GHz", "").strip())
+            
+            # 确定目标馈源轴
+            target_axis = self._determine_feed_axis(freq_ghz)
+            if not target_axis:
+                return
+                
+            # 获取当前状态
+            current_status = self.status_cache["motion"]
+            
+            # 复位上一个处于达位状态的模组
+            self._reset_previous_reached_axis(target_axis, current_status)
+            
+            # 使当前频率的模组达位
+            self._position_target_axis(target_axis, current_status)
+            
+        except ValueError:
+            self.log("无效的频率格式", "ERROR")
+
+    def _determine_feed_axis(self, freq_ghz):
+        """根据频率确定目标馈源轴"""
+        freq_ranges = {
+            "X": (8.0, 12.0),
+            "KU": (12.0, 18.0),
+            "K": (18.0, 26.5),
+            "KA": (26.5, 40.0)
+        }
+        
+        for axis, (min_freq, max_freq) in freq_ranges.items():
+            if min_freq <= freq_ghz <= max_freq:
+                return axis
+        return None
+
+    def _reset_previous_reached_axis(self, target_axis, current_status):
+        """复位上一个处于达位状态的模组"""
+        for axis in ["X", "KU", "K", "KA"]:
+            if axis != target_axis and "OK" in current_status.get(axis, {}).get("reach"):
+                # 发送复位命令
+                cmd = f"MOTion:HOME {axis}"
+                self.send_and_log(cmd)
+                self.log(f"复位{axis}轴", "INFO")
+                # 更新状态线程的操作状态
+                if self.status_thread:
+                    self.status_panel._controller.current_operation = "HOMING"
+                    self.status_panel._controller.operating_axis = target_axis
+                break  # 只复位一个轴
+
+    def _position_target_axis(self, target_axis, current_status):
+        """使目标馈源轴达位"""
+        for axis in ["X", "KU", "K", "KA"]:
+            if axis != target_axis and "OK" in current_status.get(axis, {}).get("home"):
+                cmd = f"MOTion:FEED {target_axis}"
+                self.send_and_log(cmd)
+                self.log(f"{target_axis}轴开始达位", "INFO")
+                
+                # 更新状态线程的操作状态
+                if self.status_thread:
+                    self.status_panel._controller.current_operation = "FEEDING"
+                    self.status_panel._controller.operating_axis = target_axis
+
 
     def query_freq_cmd(self):
         cmd = "READ:SOURce:FREQuency?"
@@ -599,8 +670,8 @@ class MainWindow(MainWindowUI):
         cmd = f"MOTion:HOME {val}"
         # 设置操作状态
         if self.status_thread:
-            self.status_thread.current_operation = "HOMING"
-            self.status_thread.operating_axis = val
+            self.status_panel._controller.current_operation = "HOMING"
+            self.status_panel._controller.operating_axis = val
         self.send_and_log(cmd)
 
     def query_home_cmd(self):
@@ -613,8 +684,8 @@ class MainWindow(MainWindowUI):
         cmd = f"MOTion:FEED {val}"
         # 设置操作状态
         if self.status_thread:
-            self.status_thread.current_operation = "FEEDING"
-            self.status_thread.operating_axis = val
+            self.status_panel._controller.current_operation = "FEEDING"
+            self.status_panel._controller.operating_axis = val
         self.send_and_log(cmd)
 
     def query_feed_cmd(self):
@@ -680,6 +751,7 @@ class MainWindow(MainWindowUI):
         # 委托给StatusPanel处理更新逻辑
         self.status_panel._controller.update_motion_status(status.get("motion", {}))
         self.status_panel._controller.update_src_status(status.get("src", {}))
+        self.status_panel._controller.update_operation_status(status.get("motion", {}))
 
     def _update_status_cache(self, status):
         """Update the internal status cache"""
@@ -698,33 +770,6 @@ class MainWindow(MainWindowUI):
             if val is not None:
                 self.status_cache["src"][key] = val
 
-
-
-    def _update_operation_status(self):
-        """Update the current operation status display"""
-        if self.status_thread and self.status_thread.current_operation:
-            operation = self.status_thread.current_operation
-            axis = self.status_thread.operating_axis
-            
-            label = self.status_panel.motion_label
-            if operation == "HOMING":
-                label.setText(f"{axis}轴复位中...")
-                label.setStyleSheet("color: #ff8f00;")
-            elif operation == "FEEDING":
-                label.setText(f"{axis}轴达位中...")
-                label.setStyleSheet("color: #ff8f00;")
-            
-            # Check if operation completed
-            axis_status = self.status_cache["motion"].get(axis, {})
-            if (operation == "HOMING" and "OK" in axis_status.get("home", "")) or \
-            (operation == "FEEDING" and "OK" in axis_status.get("reach", "")):
-                self.status_thread.current_operation = None
-                self.status_thread.operating_axis = None
-                label.setText("运动状态: 就绪")
-                label.setStyleSheet("color: #228B22;")
-        else:
-            self.status_panel.motion_label.setText("运动状态: 就绪")
-            self.status_panel.motion_label.setStyleSheet("color: #228B22;")
 
 
     def _format_quantity(self, value, quantity_type, target_widget=None):

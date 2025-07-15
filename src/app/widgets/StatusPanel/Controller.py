@@ -9,9 +9,11 @@ class StatusPanelController(QObject):
         super().__init__()
         self.view = view
         self.model = model
-
         # 日志回调函数
         self.log_callback = None
+
+        self.current_operation = None
+        self.operating_axis = None
         
         self.setup_connections()
         self.initialize_units()
@@ -90,7 +92,6 @@ class StatusPanelController(QObject):
             for axis, axis_status in status.items():
                 if axis in self.model.motion_status:
                     # 检查是否有错误状态
-                    
                     error_items = {k: v for k, v in axis_status.items() if v == "ERROR"}
                     if error_items:
                         # 记录日志
@@ -102,8 +103,18 @@ class StatusPanelController(QObject):
                             if value == "ERROR":
                                 self.model.motion_status[axis][item] = "ERROR"
                     else:
+                        # 更新运动状态
                         self.model.update_motion_status(axis, axis_status)
+                        
+                        # 检查当前操作是否完成
+                        if hasattr(self, 'current_operation') and hasattr(self, 'operating_axis'):
+                            if self.current_operation and self.operating_axis == axis:
+                                if (self.current_operation == "HOMING" and "OK" in axis_status.get("home", "")):
+                                    self.current_operation = axis_status.get("home", "")
+                                if (self.current_operation == "FEEDING" and "OK" in axis_status.get("reach", "")):
+                                    self.current_operation = axis_status.get("reach", "")
             self.update_ui()
+
 
     def update_src_status(self, status: dict):
         """更新信号源状态"""
@@ -128,15 +139,39 @@ class StatusPanelController(QObject):
             self.update_ui()
 
 
-    def update_operation_status(self, operation: str, axis: str):
-        """更新操作状态显示"""
-        if operation and axis:
-            self.model.style_status['motion_label']['text'] = f"{axis}轴{'复位' if operation == 'HOMING' else '达位'}中..."
+    def update_operation_status(self,axis_status: dict = None):
+        """更新操作状态显示
+        
+        Args:
+            operation: 操作类型 ('HOMING'或'FEEDING')
+            axis: 操作的轴名称
+            axis_status: 可选的轴状态字典，用于检查操作是否完成
+            
+        Returns:
+            bool: 操作是否仍在进行中 (True) 或已完成 (False)
+        """
+        if (self.current_operation == "HOMING" and "OK" not in axis_status.get("home", "")) or \
+                (self.current_operation == "FEEDING" and "OK" not in axis_status.get("reach", "")):
+            # 设置操作中状态
+            self.model.style_status['motion_label']['text'] = f"{self.operating_axis}轴{'复位' if self.current_operation == 'HOMING' else '达位'}中..."
             self.model.style_status['motion_label']['style'] = "color: #ff8f00;"
+            # 如果有提供轴状态，检查操作是否完成
+            if axis_status is not None:
+                if (self.current_operation == "HOMING" and "OK" in axis_status.get("home", "")) or \
+                (self.current_operation == "FEEDING" and "OK" in axis_status.get("reach", "")):
+                    # 操作完成，恢复就绪状态
+                    self.model.style_status['motion_label']['text'] = "运动状态: 就绪"
+                    self.model.style_status['motion_label']['style'] = "color: #228B22;"
+                    self.update_ui()
+                    return False  # 操作已完成
+            return True  # 操作仍在进行中或未提供状态检查
         else:
+            # 无操作，显示就绪状态
             self.model.style_status['motion_label']['text'] = "运动状态: 就绪"
             self.model.style_status['motion_label']['style'] = "color: #228B22;"
-        self.update_ui()
+            self.update_ui()
+            return False  # 无操作状态
+
 
     def update_ui(self):
         # 更新运动模组状态

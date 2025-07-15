@@ -21,13 +21,11 @@ class StatusQueryThread(QThread):
         self.port = int(port)
         self.mutex = mutex
         self._running = True
-        self.current_operation = None
-        self.operating_axis = None
         self.socket = None  # 添加socket实例变量
 
         # 新增状态更新控制标志
         self.update_motion = True  # 默认开启运动状态更新
-        self.update_source = True  # 默认开启信号源状态更新
+        self.update_source = False  # 默认开启信号源状态更新
 
     def run(self):
         axes = ["X", "KU", "K", "KA", "Z"]
