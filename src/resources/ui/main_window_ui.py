@@ -8,9 +8,9 @@ from PyQt5.QtGui import QRegExpValidator
 from PyQt5.QtCore import QRegExp
 from pathlib import Path
 
-from app.widgets.LogWidget import LogWidget
+from app.widgets.LogWidget.Widget import LogWidget
 from app.widgets.SimpleLinkDiagram import SimpleLinkDiagram
-from app.widgets.StatusPanel import StatusPanel
+from app.widgets.StatusPanel.StatusPanel import StatusPanel
 
 class MainWindowUI(QMainWindow):
     def __init__(self):
@@ -42,6 +42,8 @@ class MainWindowUI(QMainWindow):
         
         # 日志区域
         self.log_output = LogWidget()
+
+        
         
         # 状态面板
         self.status_panel = StatusPanel()

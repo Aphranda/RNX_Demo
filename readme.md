@@ -2,9 +2,11 @@
 ```
 RNX_Demo
 ├─ 📁.vscode
+├─ 📁build
 ├─ 📁calibrations
 │  ├─ 📁archive
 │  └─ 📁backup
+├─ 📁dist
 ├─ 📁docs
 │  ├─ 📄RNX量子天线测试系统指令表.md
 │  ├─ 📄RNX量子天线测试系统指令表.pdf
@@ -33,13 +35,20 @@ RNX_Demo
 │  │  │  ├─ 📄ProcessManager.py
 │  │  │  └─ 📄SignalUnitConverter.py
 │  │  ├─ 📁widgets
+│  │  │  ├─ 📁LogWidget
+│  │  │  │  ├─ 📁__pycache__
+│  │  │  │  ├─ 📄Controller.py
+│  │  │  │  ├─ 📄View.py
+│  │  │  │  ├─ 📄Widget.py
+│  │  │  │  └─ 📄__init__.py
+│  │  │  ├─ 📁StatusPanel
+│  │  │  │  ├─ 📁__pycache__
+│  │  │  │  └─ 📄StatusPanel.py
 │  │  │  ├─ 📁__pycache__
 │  │  │  ├─ 📄AutoFontSizeComboBox.py
 │  │  │  ├─ 📄AutoFontSizeLabel.py
 │  │  │  ├─ 📄factory.py
-│  │  │  ├─ 📄LogWidget.py
-│  │  │  ├─ 📄SimpleLinkDiagram.py
-│  │  │  └─ 📄StatusPanel.py
+│  │  │  └─ 📄SimpleLinkDiagram.py
 │  │  ├─ 📁__pycache__
 │  │  └─ 📄main_window.py
 │  ├─ 📁resources
@@ -48,13 +57,15 @@ RNX_Demo
 │  │  ├─ 📁styles
 │  │  │  └─ 📄main_window.qss
 │  │  ├─ 📁ui
-│  │  │  └─ 📄ui.py
+│  │  │  ├─ 📁__pycache__
+│  │  │  └─ 📄main_window_ui.py
 │  │  └─ 📄resources.qrc
 │  ├─ 📁test
-│  │  ├─ 📄RNX_Demo.py
+│  │  ├─ 📄RNX_Demo_TEST.py
 │  │  └─ 📄test_mian.py
 │  ├─ 📄.mian.py.lock
-│  └─ 📄mian.py
+│  ├─ 📄mian.py
+│  └─ 📄__init__.py
 ├─ 📄.gitignore
 └─ 📄readme.md
 ```

@@ -26,8 +26,6 @@ from app.utils.ProcessManager import ProcessManager
 from app.utils.SignalUnitConverter import SignalUnitConverter
 from app.controllers.CalibrationFileManager import CalibrationFileManager
 
-
-
 if __name__ == "__main__":
     # 先检查是否已有实例运行
     process_mgr = ProcessManager()

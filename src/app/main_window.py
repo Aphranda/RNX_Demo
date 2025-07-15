@@ -18,9 +18,9 @@ from resources.ui.main_window_ui import MainWindowUI
 
 from .widgets.AutoFontSizeComboBox import AutoFontSizeComboBox
 from .widgets.AutoFontSizeLabel import AutoFontSizeLabel
-from .widgets.LogWidget import LogWidget
+from .widgets.LogWidget.Widget import LogWidget
 from .widgets.SimpleLinkDiagram import SimpleLinkDiagram
-from .widgets.StatusPanel import StatusPanel
+from .widgets.StatusPanel.StatusPanel import StatusPanel
 from .threads.StatusQueryThread import StatusQueryThread
 
 
