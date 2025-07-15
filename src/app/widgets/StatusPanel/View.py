@@ -67,6 +67,13 @@ class StatusPanelView(QWidget):
             self.motion_speed[axis] = QLabel("-")
             self.motion_speed[axis].setProperty("statusValue", True)
             self.motion_speed[axis].setMinimumHeight(20)
+
+            # 添加初始样式
+            self.motion_speed[axis].setStyleSheet(
+                "background:#f5faff; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
+                "padding: 2px; margin: 1px;"  # 添加内边距和外边距
+            )
+
             self.motion_grid.addWidget(self.motion_speed[axis], i+1, 3)
         
         motion_layout.addStretch()
@@ -132,7 +139,7 @@ class StatusPanelView(QWidget):
         self.src_grid.addWidget(self.load_cal_btn, 5, 2)
 
         src_layout.addStretch()
-        
+
     def apply_style(self, element: str):
             """应用指定元素的样式"""
             style_data = self.controller.model.style_status.get(element)

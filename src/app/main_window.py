@@ -18,6 +18,8 @@ from resources.ui.main_window_ui import MainWindowUI
 
 from .threads.StatusQueryThread import StatusQueryThread
 
+from .widgets.StatusPanel.StatusPanel import StatusPanel
+
 
 class MainWindow(MainWindowUI):
     def __init__(self, Communicator, SignalUnitConverter, CalibrationFileManager):
@@ -699,8 +701,9 @@ class MainWindow(MainWindowUI):
     def update_status_panel(self, status):
         """Main method to update the status panel"""
         self._update_status_cache(status)
-        self._refresh_motion_display()
-        self._refresh_source_display()
+        # 委托给StatusPanel处理更新逻辑
+        self.status_panel._controller.update_motion_status(status.get("motion", {}))
+        self.status_panel._controller.update_src_status(status.get("src", {}))
 
     def _update_status_cache(self, status):
         """Update the internal status cache"""
@@ -723,97 +726,36 @@ class MainWindow(MainWindowUI):
         """Refresh all motion-related UI elements"""
         axes = ["X", "KU", "K", "KA", "Z"]
         
+        motion_status = {}
         for axis in axes:
             axis_status = self.status_cache["motion"][axis]
-            
-            # Update reach status
-            reach_text = "NO Pa" if axis == "Z" else axis_status.get("reach", "-")
-            self._update_status_label(
-                self.status_panel.motion_reach[axis],
-                reach_text
-            )
-            
-            # Update home status
-            self._update_status_label(
-                self.status_panel.motion_home[axis],
-                axis_status.get("home", "-")
-            )
-            
-            # Update speed status with special coloring
-            speed_text = axis_status.get("speed", "-")
-            self.status_panel.motion_speed[axis].setText(speed_text)
-            self._set_speed_background(axis, speed_text)
+            motion_status[axis] = {
+                "reach": "NO Pa" if axis == "Z" else axis_status.get("reach", "-"),
+                "home": axis_status.get("home", "-"),
+                "speed": axis_status.get("speed", "-")
+            }
         
-        # Update operation status
-        self._update_operation_status()
+        # 使用控制器API更新所有轴状态
+        self.status_panel.update_motion_status(motion_status)
+
 
     def _refresh_source_display(self):
         """Refresh source display with precise 9-character formatting"""
         src = self.status_cache["src"]
         
-        # Frequency display (9 chars)
-        freq_text = self._format_quantity(src.get("freq", "-"), "frequency")
-        self._update_status_label(self.status_panel.src_freq, freq_text)
+        # 准备状态数据
+        status = {
+            "freq": self._format_quantity(src.get("freq", "-"), "frequency"),
+            "raw_power": self._format_quantity(src.get("power", "-"), "power", target_widget="src_raw_power"),
+            "power": self._format_quantity(src.get("power", "-"), "power", target_widget="src_power"),
+            "rf": src.get("rf", "-")
+        }
         
-        # Raw power display (9 chars)
-        raw_power_text = self._format_quantity(
-            src.get("power", "-"), 
-            "power",
-            target_widget="src_raw_power"
-        )
-        self._update_status_label(self.status_panel.src_raw_power, raw_power_text)
+        # 使用控制器API更新状态
+        self.status_panel.update_src_status(status)
         
-        # Feed power display with compensation (9 chars)
-        feed_power_text = self._format_quantity(
-            src.get("power", "-"), 
-            "power",
-            target_widget="src_power"
-        )
-        
-        if feed_power_text != "-" and self.compensation_enabled:
-            try:
-                # Extract numeric value (handling different unit formats)
-                parts = feed_power_text.split()
-                if len(parts) == 2:
-                    power_value = float(parts[0])
-                    unit = parts[1]
-                else:  # Handle cases like "123.45dBm"
-                    for i, c in enumerate(feed_power_text):
-                        if c.isalpha():
-                            power_value = float(feed_power_text[:i])
-                            unit = feed_power_text[i:]
-                            break
-                
-                # Apply compensation
-                freq_str = src.get("freq", "0")
-                freq_ghz = float(freq_str.replace("GHz", "").strip()) if "GHz" in freq_str else float(freq_str)/1e9
-                compensation = self.get_compensation_value(freq_ghz)
-                actual_power = power_value + compensation
-                
-                # Reformat with same unit (ensure 9 chars)
-                if unit in ["dBμV/m", "dBuV/m"]:
-                    feed_power_text = f"{actual_power:>6.2f}{unit}"
-                elif unit == "dBm":
-                    feed_power_text = f"{actual_power:>6.3f} {unit}"
-                else:
-                    feed_power_text = f"{actual_power:>6.4f}{unit}"
-                    
-            except (ValueError, IndexError):
-                pass
-        
-        self._update_status_label(self.status_panel.src_power, feed_power_text)
-        
-        # RF status (fixed width)
-        rf_status = src.get("rf", "-")
-        self._update_status_label(
-            self.status_panel.src_rf, 
-            rf_status,
-            custom_style="ON" if rf_status.strip().upper() == "ON" else None
-        )
-        
-        # Update unit colors
+        # 更新单位组合框颜色
         self._update_unit_combo_colors()
-
 
 
     def _update_operation_status(self):
@@ -841,76 +783,6 @@ class MainWindow(MainWindowUI):
         else:
             self.status_panel.motion_label.setText("运动状态: 就绪")
             self.status_panel.motion_label.setStyleSheet("color: #228B22;")
-
-    def _update_status_label(self, label, text, custom_style=None):
-        """Update status label with fixed-width formatting"""
-        # Ensure text is exactly 9 characters wide
-        display_text = str(text).strip()
-        label.setText(display_text)
-        
-        # Set font to monospace for perfect alignment
-        # font = QFont("Courier New", 24)  # Monospaced font
-        # font.setBold(True)
-        # label.setFont(font)
-        
-        # Apply styling
-        if custom_style == "ON":
-            label.setStyleSheet(
-                "background:#b6f5c6; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
-            )
-        else:
-            self._set_status_color(label, display_text)
-
-
-    def _set_status_color(self, label, text):
-        """Set the color scheme based on status text"""
-        if any(x in text.upper() for x in ["NO", "FAIL"]):
-            style = "background:#fff9c4; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
-        elif any(x in text.upper() for x in ["OK", "PASS"]):
-            style = "background:#b6f5c6; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
-        elif any(x in text for x in ["超时", "timeout", "连接失败"]):
-            style = "background:#ffcdd2; color:#d32f2f; border:2px solid #0078d7; border-radius:8px;"
-        else:
-            style = "background:#f5faff; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
-        
-        label.setStyleSheet(style)
-
-    def _update_unit_combo_colors(self):
-        """Update the colors of unit combo boxes based on current selection"""
-        # Power unit combo
-        power_unit = self.status_panel.power_unit_combo.currentText()
-        power_color = self.status_panel.unit_converter.get_power_unit_color(power_unit)
-        self.status_panel.power_unit_combo.setStyleSheet(
-            f"background: {power_color}; color: white;"
-        )
-        
-        # Raw power unit combo
-        raw_power_unit = self.status_panel.raw_power_unit_combo.currentText()
-        raw_power_color = self.status_panel.unit_converter.get_power_unit_color(raw_power_unit)
-        self.status_panel.raw_power_unit_combo.setStyleSheet(
-            f"background: {raw_power_color}; color: white;"
-        )
-        
-        # Frequency unit combo (optional)
-        freq_color = "#0078d7"  # Default blue
-        self.status_panel.freq_unit_combo.setStyleSheet(
-            f"background: {freq_color}; color: white;"
-        )
-
-
-    def _set_speed_background(self, axis, speed_text):
-        """Set the background color for speed labels"""
-        speed_color = {
-            "LOW": "#ffe082",
-            "MID1": "#ffd54f",
-            "MID2": "#ffb300",
-            "MID3": "#ff8f00",
-            "HIGH": "#ff6f00"
-        }
-        bg = speed_color.get(speed_text.upper(), "#f5faff")
-        self.status_panel.motion_speed[axis].setStyleSheet(
-            f"background:{bg}; color:#0078d7; border:2px solid #0078d7; border-radius:8px;"
-        )
 
 
     def _format_quantity(self, value, quantity_type, target_widget=None):

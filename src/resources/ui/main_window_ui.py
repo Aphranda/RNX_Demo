@@ -46,7 +46,7 @@ class MainWindowUI(QMainWindow):
         
         
         # 状态面板
-        self.status_panel = StatusPanel()
+        self.status_panel = StatusPanel(self)
         
         # ETH 设置控件
         self.eth_ip_input = QLineEdit()
@@ -214,7 +214,6 @@ class MainWindowUI(QMainWindow):
             if Path(path).exists():
                 with open(path, 'r', encoding='utf-8') as f:
                     self.setStyleSheet(f.read())
-                print(f"成功加载样式表: {path}")
                 return
         
         print("警告: 使用嵌入式默认样式")

@@ -12,7 +12,6 @@ import time
 
 
 
-
 class StatusQueryThread(QThread):
     status_signal = pyqtSignal(dict)
 
@@ -26,6 +25,10 @@ class StatusQueryThread(QThread):
         self.operating_axis = None
         self.socket = None  # 添加socket实例变量
 
+        # 新增状态更新控制标志
+        self.update_motion = True  # 默认开启运动状态更新
+        self.update_source = True  # 默认开启信号源状态更新
+
     def run(self):
         axes = ["X", "KU", "K", "KA", "Z"]
         axis_idx = 0
@@ -33,44 +36,64 @@ class StatusQueryThread(QThread):
             status = {"motion": {}, "src": {}}
             self.mutex.lock()
             try:
-                # 每次只查一个轴
-                axis = axes[axis_idx]
-                if axis == "Z":
-                    reach = "NO Pa"
-                    home = self.query_status("READ:MOTion:HOME? ALL")
-                    speed = self.query_status("READ:MOTion:SPEED? Z")
-                else:
-                    reach = self.query_status(f"READ:MOTion:FEED? {axis}")
-                    home = self.query_status(f"READ:MOTion:HOME? {axis}")
-                    speed = self.query_status(f"READ:MOTion:SPEED? {axis}")
-
-                status["motion"][axis] = {
-                    "reach": reach,
-                    "home": home,
-                    "speed": speed
-                }
-                # 每次查一个信号源参数
-                if axis_idx == 0:
-                    freq = self.query_status("READ:SOURce:FREQuency?")
-                    status["src"]["freq"] = freq
-                elif axis_idx == 1:
-                    power = self.query_status("READ:SOURce:POWer?")
-                    status["src"]["power"] = power
-                elif axis_idx == 2:
-                    rf = self.query_status("READ:SOURce:OUTPut?")
-                    status["src"]["rf"] = rf
+                # 查询运动状态 (如果启用)
+                if self.update_motion:
+                    axis = axes[axis_idx]
+                    if axis == "Z":
+                        reach = "NO Pa"
+                        home = self.query_status("READ:MOTion:HOME? ALL")
+                        speed = self.query_status("READ:MOTion:SPEED? Z")
+                    else:
+                        reach = self.query_status(f"READ:MOTion:FEED? {axis}")
+                        home = self.query_status(f"READ:MOTion:HOME? {axis}")
+                        speed = self.query_status(f"READ:MOTion:SPEED? {axis}")
+ 
+                    status["motion"][axis] = {
+                        "reach": reach,
+                        "home": home,
+                        "speed": speed
+                    }
+ 
+                # 查询信号源状态 (如果启用)
+                if self.update_source:
+                    if axis_idx == 0:
+                        freq = self.query_status("READ:SOURce:FREQuency?")
+                        status["src"]["freq"] = freq
+                    elif axis_idx == 1:
+                        power = self.query_status("READ:SOURce:POWer?")
+                        status["src"]["power"] = power
+                    elif axis_idx == 2:
+                        rf = self.query_status("READ:SOURce:OUTPut?")
+                        status["src"]["rf"] = rf
+                        
             except Exception as e:
-                self.log(f"查询状态出错: {str(e)}", "ERROR")
+                print(f"查询状态出错: {str(e)}")
             finally:
                 self.mutex.unlock()
                 
-            self.status_signal.emit(status)
+            if status["motion"] or status["src"]:  # 只有有数据时才发送
+                self.status_signal.emit(status)
+                
             axis_idx = (axis_idx + 1) % len(axes)
+            
             # 细粒度sleep，保证stop及时
             for _ in range(5):
                 if not self._running:
                     break
                 time.sleep(0.05)
+
+    # 新增方法：控制状态更新开关
+    def set_update_flags(self, motion=None, source=None):
+        """设置状态更新标志
+        Args:
+            motion: bool - 是否更新运动状态
+            source: bool - 是否更新信号源状态
+        """
+        if motion is not None:
+            self.update_motion = motion
+        if source is not None:
+            self.update_source = source
+
 
     def query_status(self, cmd, max_retries=3, base_timeout=1.0):
         """带超时重发机制的查询方法"""
@@ -153,7 +176,7 @@ class StatusQueryThread(QThread):
         if last_exception:
             error_msg += f": {str(last_exception)}"
         
-        return error_msg
+        return "ERROR"
 
     def stop(self):
         """安全停止线程"""

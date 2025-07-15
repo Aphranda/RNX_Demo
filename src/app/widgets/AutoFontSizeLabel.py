@@ -10,7 +10,7 @@ class AutoFontSizeLabel(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._min_font_size = 6
-        self._max_font_size = 32
+        self._max_font_size = 24
         self._default_font_size = 24  # 默认字体大小
         self._content_margin = 10
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
