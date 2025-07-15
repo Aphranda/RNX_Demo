@@ -120,6 +120,8 @@ class StatusPanelController(QObject):
                 for item, value in status.items():
                     if value == "ERROR":
                         self.model.src_status[item] = "ERROR"
+                if status.get('power') == "ERROR":
+                    self.model.src_status['raw_power'] = "ERROR"
             else:
                 # 没有错误则正常更新
                 self.model.update_src_status(status)

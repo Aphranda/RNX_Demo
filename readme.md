@@ -1,7 +1,6 @@
 
 ```
 RNX_Demo
-├─ 📁.vscode
 ├─ 📁build
 ├─ 📁calibrations
 │  ├─ 📁archive
@@ -38,12 +37,16 @@ RNX_Demo
 │  │  │  ├─ 📁LogWidget
 │  │  │  │  ├─ 📁__pycache__
 │  │  │  │  ├─ 📄Controller.py
+│  │  │  │  ├─ 📄LogWidget.py
 │  │  │  │  ├─ 📄View.py
-│  │  │  │  ├─ 📄Widget.py
 │  │  │  │  └─ 📄__init__.py
 │  │  │  ├─ 📁StatusPanel
 │  │  │  │  ├─ 📁__pycache__
-│  │  │  │  └─ 📄StatusPanel.py
+│  │  │  │  ├─ 📄Controller.py
+│  │  │  │  ├─ 📄Model.py
+│  │  │  │  ├─ 📄StatusPanel.py
+│  │  │  │  ├─ 📄View.py
+│  │  │  │  └─ 📄__init__.py
 │  │  │  ├─ 📁__pycache__
 │  │  │  ├─ 📄AutoFontSizeComboBox.py
 │  │  │  ├─ 📄AutoFontSizeLabel.py

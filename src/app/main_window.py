@@ -230,7 +230,7 @@ class MainWindow(MainWindowUI):
         text = text.strip()
         
         # 条件1: 长度不超过2时不处理
-        if len(text) <= 2:
+        if len(text) < 2:
             return False
         
         # 条件2: 如果最后输入的是符号(+/-)不处理
@@ -243,7 +243,6 @@ class MainWindow(MainWindowUI):
             num_part = text.replace("dBm", "").strip()
             if not num_part:  # 空字符串
                 return False
-            float(num_part)
             return True
         except ValueError:
             return False
@@ -260,11 +259,14 @@ class MainWindow(MainWindowUI):
         if self.raw_power_input.signalsBlocked():
             return
         
+        print("PT DEBUG:START3")
+        
         try:
             power_dbm = float(text.replace("dBm", "").strip())
             
             # 获取当前频率
             freq_str = self.status_cache["src"].get("freq", "0")
+            print("freq_str:",freq_str)
             if not self.is_valid_frequency(freq_str):
                 self.show_status("当前频率无效，无法计算补偿", timeout=3000)
                 return
@@ -275,6 +277,7 @@ class MainWindow(MainWindowUI):
             compensation = self.get_compensation_value(freq_ghz) if self.compensation_enabled else 0.0
             raw_power = power_dbm - compensation
             
+            print(raw_power)
             # 更新原始功率输入框（不触发信号）
             self.raw_power_input.blockSignals(True)
             self.raw_power_input.setText(f"{raw_power:.2f} dBm")
@@ -427,33 +430,6 @@ class MainWindow(MainWindowUI):
                 self.log(f"步进: {freq_params.get('step_ghz', '未知')} GHz", "INFO")
                 self.log(f"点数: {meta.get('points', '未知')}", "INFO")
         
-        # # 打印校准数据
-        # self.log("\n=== 数据点示例 ===", "INFO")
-        # if data_points:
-        #     # 打印前5个点
-        #     self.log("前5个数据点:", "INFO")
-        #     for i, point in enumerate(data_points[:5]):
-        #         self.log(
-        #             f"点 {i}: 频率={point['freq']:.3f}GHz, "
-        #             f"Xθ={point['x_theta']:.2f}, Xφ={point['x_phi']:.2f}, "
-        #             f"KUθ={point['ku_theta']:.2f}, KUφ={point['ku_phi']:.2f}, "
-        #             f"Kθ={point['k_theta']:.2f}, Kφ={point['k_phi']:.2f}, "
-        #             f"KAθ={point['ka_theta']:.2f}, KAφ={point['ka_phi']:.2f}", 
-        #             "INFO"
-        #         )
-            
-        #     # 打印后5个点（如果存在）
-        #     if len(data_points) > 5:
-        #         self.log("\n最后5个数据点:", "INFO")
-        #         for i, point in enumerate(data_points[-5:], len(data_points)-5):
-        #             self.log(
-        #                 f"点 {i}: 频率={point['freq']:.3f}GHz, "
-        #                 f"Xθ={point['x_theta']:.2f}, Xφ={point['x_phi']:.2f}, "
-        #                 f"KUθ={point['ku_theta']:.2f}, KUφ={point['ku_phi']:.2f}, "
-        #                 f"Kθ={point['k_theta']:.2f}, Kφ={point['k_phi']:.2f}, "
-        #                 f"KAθ={point['ka_theta']:.2f}, KAφ={point['ka_phi']:.2f}", 
-        #                 "INFO"
-        #             )
         
         self.log("\n=== 总结 ===", "INFO")
         self.log(f"总数据点数: {len(data_points)}", "INFO")
@@ -695,8 +671,8 @@ class MainWindow(MainWindowUI):
                 self.status_thread._running = True
                 self.status_thread.start()
 
-    def show_status(self, message):
-        self.status_bar.showMessage(message)
+    def show_status(self, message, timeout=0):
+        self.status_bar.showMessage(message, timeout)
 
     def update_status_panel(self, status):
         """Main method to update the status panel"""
@@ -722,40 +698,6 @@ class MainWindow(MainWindowUI):
             if val is not None:
                 self.status_cache["src"][key] = val
 
-    def _refresh_motion_display(self):
-        """Refresh all motion-related UI elements"""
-        axes = ["X", "KU", "K", "KA", "Z"]
-        
-        motion_status = {}
-        for axis in axes:
-            axis_status = self.status_cache["motion"][axis]
-            motion_status[axis] = {
-                "reach": "NO Pa" if axis == "Z" else axis_status.get("reach", "-"),
-                "home": axis_status.get("home", "-"),
-                "speed": axis_status.get("speed", "-")
-            }
-        
-        # 使用控制器API更新所有轴状态
-        self.status_panel.update_motion_status(motion_status)
-
-
-    def _refresh_source_display(self):
-        """Refresh source display with precise 9-character formatting"""
-        src = self.status_cache["src"]
-        
-        # 准备状态数据
-        status = {
-            "freq": self._format_quantity(src.get("freq", "-"), "frequency"),
-            "raw_power": self._format_quantity(src.get("power", "-"), "power", target_widget="src_raw_power"),
-            "power": self._format_quantity(src.get("power", "-"), "power", target_widget="src_power"),
-            "rf": src.get("rf", "-")
-        }
-        
-        # 使用控制器API更新状态
-        self.status_panel.update_src_status(status)
-        
-        # 更新单位组合框颜色
-        self._update_unit_combo_colors()
 
 
     def _update_operation_status(self):
