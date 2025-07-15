@@ -8,7 +8,7 @@ from PyQt5.QtGui import QRegExpValidator
 from PyQt5.QtCore import QRegExp
 from pathlib import Path
 
-from app.widgets.LogWidget.Widget import LogWidget
+from app.widgets.LogWidget.LogWidget import LogWidget
 from app.widgets.SimpleLinkDiagram import SimpleLinkDiagram
 from app.widgets.StatusPanel.StatusPanel import StatusPanel
 

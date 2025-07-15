@@ -16,11 +16,6 @@ sys.path.insert(0, BASE_DIR)
 
 from resources.ui.main_window_ui import MainWindowUI
 
-from .widgets.AutoFontSizeComboBox import AutoFontSizeComboBox
-from .widgets.AutoFontSizeLabel import AutoFontSizeLabel
-from .widgets.LogWidget.Widget import LogWidget
-from .widgets.SimpleLinkDiagram import SimpleLinkDiagram
-from .widgets.StatusPanel.StatusPanel import StatusPanel
 from .threads.StatusQueryThread import StatusQueryThread
 
 
@@ -356,16 +351,20 @@ class MainWindow(MainWindowUI):
             if result:
                 self.calibration_data = result['data']
                 self.compensation_enabled = True
-                self.status_panel.cal_file_status.setText("Calib Load")
-                self.status_panel.cal_file_status.setStyleSheet(
-                    "background:#b6f5c6; color:#0078d7;"
+                self.status_panel.update_src_status({"cal_file": "Calib Load"})
+
+                self.status_panel.set_cal_file_style(
+                    text="Calib Load",
+                    state="loaded"  # 可以是 'loaded'/'missing'/'invalid'
                 )
+
                 self.log("校准文件加载成功，补偿功能已启用", "SUCCESS")
             else:
                 self.compensation_enabled = False
-                self.status_panel.cal_file_status.setText("Calib Invalid")
-                self.status_panel.cal_file_status.setStyleSheet(
-                    "background:#ffcdd2; color:#d32f2f;"
+                self.status_panel.update_src_status({"cal_file": "Calib Invalid"})
+                self.status_panel.set_cal_file_style(
+                    text="Calib Load",
+                    state="invalid"  # 可以是 'loaded'/'missing'/'invalid'
                 )
                 self.log("校准文件加载失败", "ERROR")
 
