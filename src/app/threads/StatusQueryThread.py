@@ -98,7 +98,7 @@ class StatusQueryThread(QThread):
         retry_count = 0
         last_exception = None
         
-        while retry_count < max_retries:
+        while retry_count < max_retries and self._running:
             sock = None
             try:
                 # 动态计算当前超时时间 (指数退避算法)

@@ -73,7 +73,7 @@ class MainWindow(MainWindowUI):
         self.speed_btn.clicked.connect(self.send_speed_cmd)
         self.speed_query_btn.clicked.connect(self.query_speed_cmd)
         self.status_panel.load_cal_btn.clicked.connect(self.load_calibration_file)
-        # self.status_panel._controller.motion_command.connect(self._send_motion_command)
+        self.status_panel._controller.motion_command.connect(self._send_motion_command)
         self.power_input.textChanged.connect(self.on_power_input_changed)
         self.raw_power_input.textChanged.connect(self.on_raw_power_input_changed)
         
@@ -695,7 +695,7 @@ class MainWindow(MainWindowUI):
                 return
                 
             # 对于运动命令，我们不期待响应，直接标记为成功
-            self.status_panel._controller._on_operation_complete(True)
+            # self.status_panel._controller._on_operation_complete(True)
             
         finally:
             self.comm_mutex.unlock()
