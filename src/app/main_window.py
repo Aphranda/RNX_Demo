@@ -73,6 +73,7 @@ class MainWindow(MainWindowUI):
         self.speed_btn.clicked.connect(self.send_speed_cmd)
         self.speed_query_btn.clicked.connect(self.query_speed_cmd)
         self.status_panel.load_cal_btn.clicked.connect(self.load_calibration_file)
+        # self.status_panel._controller.motion_command.connect(self._send_motion_command)
         self.power_input.textChanged.connect(self.on_power_input_changed)
         self.raw_power_input.textChanged.connect(self.on_raw_power_input_changed)
         
@@ -521,14 +522,8 @@ class MainWindow(MainWindowUI):
             if not target_axis:
                 return
                 
-            # 获取当前状态
-            current_status = self.status_cache["motion"]
-            
-            # 复位上一个处于达位状态的模组
-            self._reset_previous_reached_axis(target_axis, current_status)
-            
-            # 使当前频率的模组达位
-            self._position_target_axis(target_axis, current_status)
+            # 使用状态机控制器请求达位
+            self.status_panel._controller.request_feed(target_axis)
             
         except ValueError:
             self.log("无效的频率格式", "ERROR")
@@ -546,33 +541,6 @@ class MainWindow(MainWindowUI):
             if min_freq <= freq_ghz <= max_freq:
                 return axis
         return None
-
-    def _reset_previous_reached_axis(self, target_axis, current_status):
-        """复位上一个处于达位状态的模组"""
-        for axis in ["X", "KU", "K", "KA"]:
-            if axis != target_axis and "OK" in current_status.get(axis, {}).get("reach"):
-                # 发送复位命令
-                cmd = f"MOTion:HOME {axis}"
-                self.send_and_log(cmd)
-                self.log(f"复位{axis}轴", "INFO")
-                # 更新状态线程的操作状态
-                if self.status_thread:
-                    self.status_panel._controller.current_operation = "HOMING"
-                    self.status_panel._controller.operating_axis = target_axis
-                break  # 只复位一个轴
-
-    def _position_target_axis(self, target_axis, current_status):
-        """使目标馈源轴达位"""
-        for axis in ["X", "KU", "K", "KA"]:
-            if axis != target_axis and "OK" in current_status.get(axis, {}).get("home"):
-                cmd = f"MOTion:FEED {target_axis}"
-                self.send_and_log(cmd)
-                self.log(f"{target_axis}轴开始达位", "INFO")
-                
-                # 更新状态线程的操作状态
-                if self.status_thread:
-                    self.status_panel._controller.current_operation = "FEEDING"
-                    self.status_panel._controller.operating_axis = target_axis
 
 
     def query_freq_cmd(self):
@@ -666,13 +634,16 @@ class MainWindow(MainWindowUI):
         self.send_and_log(cmd)
 
     def send_home_cmd(self):
+        # val = self.home_combo.currentText()
+        # cmd = f"MOTion:HOME {val}"
+        # # 设置操作状态
+        # if self.status_thread:
+        #     self.status_panel._controller.current_operation = "HOMING"
+        #     self.status_panel._controller.operating_axis = val
+        # self.send_and_log(cmd)
         val = self.home_combo.currentText()
-        cmd = f"MOTion:HOME {val}"
-        # 设置操作状态
-        if self.status_thread:
-            self.status_panel._controller.current_operation = "HOMING"
-            self.status_panel._controller.operating_axis = val
-        self.send_and_log(cmd)
+        # 使用状态机控制器请求复位
+        self.status_panel._controller.request_home(val)
 
     def query_home_cmd(self):
         val = self.home_combo.currentText()
@@ -680,13 +651,16 @@ class MainWindow(MainWindowUI):
         self.send_and_log(cmd)
 
     def send_feed_cmd(self):
+        # val = self.feed_combo.currentText()
+        # cmd = f"MOTion:FEED {val}"
+        # # 设置操作状态
+        # if self.status_thread:
+        #     self.status_panel._controller.current_operation = "FEEDING"
+        #     self.status_panel._controller.operating_axis = val
+        # self.send_and_log(cmd)
         val = self.feed_combo.currentText()
-        cmd = f"MOTion:FEED {val}"
-        # 设置操作状态
-        if self.status_thread:
-            self.status_panel._controller.current_operation = "FEEDING"
-            self.status_panel._controller.operating_axis = val
-        self.send_and_log(cmd)
+        # 使用状态机控制器请求达位
+        self.status_panel._controller.request_feed(val)
 
     def query_feed_cmd(self):
         val = self.feed_combo.currentText()
@@ -703,6 +677,32 @@ class MainWindow(MainWindowUI):
         mod = self.speed_mod_combo.currentText()
         cmd = f"READ:MOTion:SPEED? {mod}"
         self.send_and_log(cmd)
+
+    def _send_motion_command(self, cmd):
+        """发送运动命令"""
+        # 优先暂停状态线程，防止抢占
+        if self.status_thread and self.status_thread.isRunning():
+            self.status_thread._running = False
+            self.status_thread.wait()
+            
+        self.comm_mutex.lock()
+        try:
+            self.log(cmd, "SEND")
+            success, msg = self.tcp_client.send(cmd + '\n')
+            if not success:
+                self.log(f"发送失败: {msg}", "ERROR")
+                self.show_status(msg)
+                return
+                
+            # 对于运动命令，我们不期待响应，直接标记为成功
+            self.status_panel._controller._on_operation_complete(True)
+            
+        finally:
+            self.comm_mutex.unlock()
+            # 手动指令完成后重启状态线程
+            if self.status_thread:
+                self.status_thread._running = True
+                self.status_thread.start()
 
     def send_and_log(self, cmd):
         # 优先暂停状态线程，防止抢占
