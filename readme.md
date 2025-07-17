@@ -7,6 +7,7 @@ RNX_Demo
 │  └─ 📁backup
 ├─ 📁dist
 ├─ 📁docs
+│  ├─ 📄NRPxxSN_UserManual_en_25.pdf
 │  ├─ 📄RNX量子天线测试系统指令表.md
 │  ├─ 📄RNX量子天线测试系统指令表.pdf
 │  ├─ 📄RNX量子天线测试系统链路图.png
@@ -19,13 +20,26 @@ RNX_Demo
 │  │  │  ├─ 📁__pycache__
 │  │  │  └─ 📄CalibrationFileManager.py
 │  │  ├─ 📁core
+│  │  │  ├─ 📁exceptions
+│  │  │  │  ├─ 📄base.py
+│  │  │  │  ├─ 📄calibration.py
+│  │  │  │  ├─ 📄instrument.py
+│  │  │  │  └─ 📄__init__.py
 │  │  │  ├─ 📁__pycache__
+│  │  │  ├─ 📄error_handlers.py
 │  │  │  ├─ 📄message_bus.py
 │  │  │  └─ 📄tcp_client.py
 │  │  ├─ 📁dialogs
 │  │  │  └─ 📄__init__.py
+│  │  ├─ 📁instruments
+│  │  │  ├─ 📄factory.py
+│  │  │  ├─ 📄interfaces.py
+│  │  │  ├─ 📄nrp50s.py
+│  │  │  └─ 📄plasg_signal_source.py
 │  │  ├─ 📁models
 │  │  │  └─ 📄__init__.py
+│  │  ├─ 📁services
+│  │  │  └─ 📄calibration.py
 │  │  ├─ 📁threads
 │  │  │  ├─ 📁__pycache__
 │  │  │  └─ 📄StatusQueryThread.py
@@ -40,6 +54,10 @@ RNX_Demo
 │  │  │  │  ├─ 📄LogWidget.py
 │  │  │  │  ├─ 📄View.py
 │  │  │  │  └─ 📄__init__.py
+│  │  │  ├─ 📁NRP50SCalibrationPanel
+│  │  │  │  ├─ 📄Controller.py
+│  │  │  │  ├─ 📄Model.py
+│  │  │  │  └─ 📄View.py
 │  │  │  ├─ 📁StatusPanel
 │  │  │  │  ├─ 📁__pycache__
 │  │  │  │  ├─ 📄Controller.py
