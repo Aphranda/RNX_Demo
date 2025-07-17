@@ -1,10 +1,10 @@
 from PyQt5.QtWidgets import (
     QMainWindow, QStatusBar, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QComboBox, QLineEdit, QTextEdit, QGroupBox, QGridLayout,
-    QSizePolicy, QToolBar, QFileDialog,QCheckBox
+    QSizePolicy, QToolBar, QFileDialog, QCheckBox, QAction
 )
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QRegExpValidator
+from PyQt5.QtGui import QRegExpValidator, QIcon
 from PyQt5.QtCore import QRegExp
 from pathlib import Path
 
@@ -23,6 +23,9 @@ class MainWindowUI(QMainWindow):
         
         # 设置布局
         self._setup_layout()
+        
+        # 创建工具栏
+        self._create_toolbar()
         
         # 应用样式表
         self._load_stylesheet()
@@ -43,8 +46,6 @@ class MainWindowUI(QMainWindow):
         # 日志区域
         self.log_output = LogWidget()
 
-        
-        
         # 状态面板
         self.status_panel = StatusPanel(self)
         
@@ -104,6 +105,76 @@ class MainWindowUI(QMainWindow):
         self.power_input.setValidator(power_validator)
         self.raw_power_input.setValidator(power_validator)
 
+    def _create_toolbar(self):
+        """创建主工具栏"""
+        self.toolbar = QToolBar("主工具栏")
+        self.toolbar.setMovable(False)
+        self.addToolBar(Qt.TopToolBarArea, self.toolbar)
+        
+        # 设置工具栏图标和文字都显示
+        self.toolbar.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        
+        # 数据绘图
+        icon_path = "src/resources/icons/icon_plot.png"  # 使用实际路径
+        if Path(icon_path).exists():
+            self.plot_action = QAction(QIcon(icon_path), "数据绘图", self)
+        else:
+            self.plot_action = QAction("数据绘图", self)
+        self.plot_action.setStatusTip("打开数据绘图工具")
+        self.toolbar.addAction(self.plot_action)
+        
+        # 校准工具
+        icon_path = "src/resources/icons/icon_calibration.png"
+        if Path(icon_path).exists():
+            self.calibration_action = QAction(QIcon(icon_path), "校准", self)
+        else:
+            self.calibration_action = QAction("校准", self)
+        self.calibration_action.setStatusTip("打开校准工具")
+        self.toolbar.addAction(self.calibration_action)
+        
+        # 添加分隔线
+        self.toolbar.addSeparator()
+        
+        # 数据导入
+        icon_path = "src/resources/icons/icon_import.png"
+        if Path(icon_path).exists():
+            self.import_action = QAction(QIcon(icon_path), "导入数据", self)
+        else:
+            self.import_action = QAction("导入数据", self)
+        self.import_action.setStatusTip("导入测试数据")
+        self.toolbar.addAction(self.import_action)
+        
+        # 数据导出
+        icon_path = "src/resources/icons/icon_export.png"
+        if Path(icon_path).exists():
+            self.export_action = QAction(QIcon(icon_path), "导出数据", self)
+        else:
+            self.export_action = QAction("导出数据", self)
+        self.export_action.setStatusTip("导出测试数据")
+        self.toolbar.addAction(self.export_action)
+        
+        # 添加分隔线
+        self.toolbar.addSeparator()
+        
+        # 系统设置
+        icon_path = "src/resources/icons/icon_settings.png"
+        if Path(icon_path).exists():
+            self.settings_action = QAction(QIcon(icon_path), "系统设置", self)
+        else:
+            self.settings_action = QAction("系统设置", self)
+        self.settings_action.setStatusTip("打开系统设置")
+        self.toolbar.addAction(self.settings_action)
+        
+        # 帮助
+        icon_path = "src/resources/icons/icon_help.png"
+        if Path(icon_path).exists():
+            self.help_action = QAction(QIcon(icon_path), "帮助", self)
+        else:
+            self.help_action = QAction("帮助", self)
+        self.help_action.setStatusTip("打开帮助文档")
+        self.toolbar.addAction(self.help_action)
+
+
     def _setup_layout(self):
         """设置主布局"""
         main_layout = QHBoxLayout()
@@ -138,6 +209,7 @@ class MainWindowUI(QMainWindow):
         status_layout.addWidget(self.status_panel)
         right_panel.addWidget(status_group)
         
+        right_panel.addSpacing(-20)
         # ETH 设置
         eth_group = QGroupBox()
         eth_layout = QHBoxLayout(eth_group)

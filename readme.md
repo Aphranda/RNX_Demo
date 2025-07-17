@@ -28,7 +28,8 @@ RNX_Demo
 │  │  │  ├─ 📁__pycache__
 │  │  │  ├─ 📄error_handlers.py
 │  │  │  ├─ 📄message_bus.py
-│  │  │  └─ 📄tcp_client.py
+│  │  │  ├─ 📄tcp_client.py
+│  │  │  └─ 📄threads.py
 │  │  ├─ 📁dialogs
 │  │  │  └─ 📄__init__.py
 │  │  ├─ 📁instruments
@@ -48,16 +49,16 @@ RNX_Demo
 │  │  │  ├─ 📄ProcessManager.py
 │  │  │  └─ 📄SignalUnitConverter.py
 │  │  ├─ 📁widgets
+│  │  │  ├─ 📁CalibrationPanel
+│  │  │  │  ├─ 📄Controller.py
+│  │  │  │  ├─ 📄Model.py
+│  │  │  │  └─ 📄View.py
 │  │  │  ├─ 📁LogWidget
 │  │  │  │  ├─ 📁__pycache__
 │  │  │  │  ├─ 📄Controller.py
 │  │  │  │  ├─ 📄LogWidget.py
 │  │  │  │  ├─ 📄View.py
 │  │  │  │  └─ 📄__init__.py
-│  │  │  ├─ 📁NRP50SCalibrationPanel
-│  │  │  │  ├─ 📄Controller.py
-│  │  │  │  ├─ 📄Model.py
-│  │  │  │  └─ 📄View.py
 │  │  │  ├─ 📁StatusPanel
 │  │  │  │  ├─ 📁__pycache__
 │  │  │  │  ├─ 📄Controller.py
@@ -74,7 +75,13 @@ RNX_Demo
 │  │  └─ 📄main_window.py
 │  ├─ 📁resources
 │  │  ├─ 📁icons
-│  │  │  └─ 📄icon_RNX_01.ico
+│  │  │  ├─ 📄icon-help.png
+│  │  │  ├─ 📄icon_calibration.png
+│  │  │  ├─ 📄icon_export.png
+│  │  │  ├─ 📄icon_import.png
+│  │  │  ├─ 📄icon_plot.png
+│  │  │  ├─ 📄icon_RNX_01.ico
+│  │  │  └─ 📄icon_settings.png
 │  │  ├─ 📁styles
 │  │  │  └─ 📄main_window.qss
 │  │  ├─ 📁ui

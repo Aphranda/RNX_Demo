@@ -1,3 +1,9 @@
 <qresource prefix="/">
     <file alias="styles/main_window.qss">styles/main_window.qss</file>
+    <file>icons/icon_plot.png</file>
+    <file>icons/icon_calibration.png</file>
+    <file>icons/icon_import.png</file>
+    <file>icons/icon_export.png</file>
+    <file>icons/icon_settings.png</file>
+    <file>icons/icon_help.png</file>
 </qresource>
