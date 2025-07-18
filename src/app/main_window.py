@@ -129,6 +129,7 @@ class MainWindow(MainWindowUI):
             self.tcp_client.close()
             self.show_status("已断开连接。")
             self.log("已断开连接。", "INFO")
+            self.pause_status_thread()
             self._stop_status_thread()
             self._update_connection_ui(False)
         else:
@@ -147,8 +148,17 @@ class MainWindow(MainWindowUI):
         """停止状态查询线程"""
         if self.status_thread:
             self.status_thread.stop()
-            self.status_thread.wait()
             self.status_thread = None
+
+    def pause_status_thread(self):
+        """暂停状态查询线程"""
+        if self.status_thread and self.status_thread.isRunning():
+            self.status_thread.pause()
+ 
+    def resume_status_thread(self):
+        """恢复状态查询线程"""
+        if self.status_thread and self.status_thread.isRunning():
+            self.status_thread.resume()
 
     def _update_connection_ui(self, connected):
         """更新连接状态的UI"""
@@ -166,16 +176,11 @@ class MainWindow(MainWindowUI):
     def _on_freq_link_state_changed(self, state):
         """处理频率联动复选框状态变化"""
         if state == Qt.Checked and not self._is_freq_link_connected:
-            self.link_mode_combo.currentTextChanged.connect(self._update_feed_for_freq)
             self._is_freq_link_connected = True
             self.log("频率与馈源联动已启用", "WARNING")
             self.motion_group.setTitle("运动控制 (频率联动模式下禁用)")
             self.motion_group.setEnabled(False)
         elif state != Qt.Checked and self._is_freq_link_connected:
-            try:
-                self.link_mode_combo.currentTextChanged.disconnect(self._update_feed_for_freq)
-            except TypeError:
-                pass
             self._is_freq_link_connected = False
             self.log("频率与馈源联动已禁用", "WARNING")
             self.motion_group.setTitle("运动控制")
@@ -457,19 +462,25 @@ class MainWindow(MainWindowUI):
         return closest_point.get('x_theta', 0.0)
 
     # --- 指令组合与发送 ---
+    # --- 链路切换，并且移动馈源位置。
     def send_link_cmd(self):
+        """发送链路配置命令"""
         mode = self.link_mode_combo.currentText()
         cmd = f"CONFigure:LINK {mode}"
         self.link_diagram.set_link(mode)  # 动态刷新链路图
+        
+        # 发送命令
         self.send_and_log(cmd)
+        
+        # 如果频率联动已启用，则执行联动逻辑
+        if self._is_freq_link_connected:
+            self._update_feed_for_freq(mode)
 
     # --- 链路查询 ---
     def query_link_cmd(self):
         cmd = "READ:LINK:STATe?"
-        # 优先暂停状态线程，防止抢占
-        if self.status_thread and self.status_thread.isRunning():
-            self.status_thread._running = False
-            self.status_thread.wait()
+        # 暂停状态线程
+        self.pause_status_thread()
         
         self.comm_mutex.lock()
         try:
@@ -483,7 +494,6 @@ class MainWindow(MainWindowUI):
             success, resp = self.tcp_client.receive()
             if success:
                 self.log(resp, "RECV")
-                # 解析响应并更新链路图
                 current_link = self.parse_link_response(resp)
                 self.link_diagram.set_link(current_link)
                 self.show_status(f"当前链路: {current_link}")
@@ -492,10 +502,9 @@ class MainWindow(MainWindowUI):
                 self.show_status(resp)
         finally:
             self.comm_mutex.unlock()
-            # 手动指令完成后重启状态线程
-            if self.status_thread:
-                self.status_thread._running = True
-                self.status_thread.start()
+            # 恢复状态线程
+            self.resume_status_thread()
+
 
     def send_freq_cmd(self):
         val = self.freq_input.text().strip()
@@ -580,9 +589,7 @@ class MainWindow(MainWindowUI):
         cmd = "READ:SOURce:POWer?"
         if self.compensation_enabled:
             # 优先暂停状态线程，防止抢占
-            if self.status_thread and self.status_thread.isRunning():
-                self.status_thread._running = False
-                self.status_thread.wait()
+            self.pause_status_thread()
             
             self.comm_mutex.lock()
             try:
@@ -618,9 +625,7 @@ class MainWindow(MainWindowUI):
             finally:
                 self.comm_mutex.unlock()
                 # 手动指令完成后重启状态线程
-                if self.status_thread:
-                    self.status_thread._running = True
-                    self.status_thread.start()
+                self.resume_status_thread()
         else:
             self.send_and_log(cmd)
 
@@ -681,9 +686,7 @@ class MainWindow(MainWindowUI):
     def _send_motion_command(self, cmd):
         """发送运动命令"""
         # 优先暂停状态线程，防止抢占
-        if self.status_thread and self.status_thread.isRunning():
-            self.status_thread._running = False
-            self.status_thread.wait()
+        self.pause_status_thread()
             
         self.comm_mutex.lock()
         try:
@@ -700,15 +703,11 @@ class MainWindow(MainWindowUI):
         finally:
             self.comm_mutex.unlock()
             # 手动指令完成后重启状态线程
-            if self.status_thread:
-                self.status_thread._running = True
-                self.status_thread.start()
+            self.resume_status_thread()
 
     def send_and_log(self, cmd):
         # 优先暂停状态线程，防止抢占
-        if self.status_thread and self.status_thread.isRunning():
-            self.status_thread._running = False
-            self.status_thread.wait()
+        self.pause_status_thread()
         self.comm_mutex.lock()
         try:
             self.log(cmd, "SEND")
@@ -738,9 +737,7 @@ class MainWindow(MainWindowUI):
         finally:
             self.comm_mutex.unlock()
             # 手动指令完成后重启状态线程
-            if self.status_thread:
-                self.status_thread._running = True
-                self.status_thread.start()
+            self.resume_status_thread()
 
     def show_status(self, message, timeout=0):
         self.status_bar.showMessage(message, timeout)

@@ -1,40 +1,44 @@
-from PyQt5.QtWidgets import (
-    QMainWindow, QApplication, QStatusBar, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QComboBox, QLineEdit, QTextEdit, QGroupBox, QGridLayout, 
-    QSizePolicy, QMessageBox, QCheckBox, QToolBar, QAction, QFileDialog
-)
-from PyQt5.QtGui import QFont, QColor, QPainter, QPen, QFontMetrics, QTextCursor, QTextCharFormat, QIcon
-from PyQt5.QtCore import Qt, QPointF, QThread, pyqtSignal, QMutex, QSize
-from PyQt5.QtGui import QRegExpValidator
-from PyQt5.QtCore import QRegExp
-import socket, select
+from PyQt5.QtCore import QThread, pyqtSignal, QMutex, QWaitCondition
+import socket
 import time
-
-
 
 class StatusQueryThread(QThread):
     status_signal = pyqtSignal(dict)
-
+    
     def __init__(self, ip, port, mutex, parent=None):
         super().__init__(parent)
         self.ip = ip
         self.port = int(port)
         self.mutex = mutex
         self._running = True
-        self.socket = None  # 添加socket实例变量
-
-        # 新增状态更新控制标志
-        self.update_motion = True  # 默认开启运动状态更新
-        self.update_source = False  # 默认开启信号源状态更新
+        self._paused = False  # 新增暂停状态标志
+        self.condition = QWaitCondition()  # 用于暂停/恢复的等待条件
+        self.socket = None
+        
+        # 状态更新控制标志
+        self.update_motion = True
+        self.update_source = False
 
     def run(self):
         axes = ["X", "KU", "K", "KA", "Z"]
         axis_idx = 0
+        
         while self._running:
+            # 检查暂停状态
+            self.mutex.lock()
+            try:
+                while self._paused and self._running:
+                    self.condition.wait(self.mutex)  # 等待恢复信号
+            finally:
+                self.mutex.unlock()
+            
+            if not self._running:
+                break
+                
             status = {"motion": {}, "src": {}}
             self.mutex.lock()
             try:
-                # 查询运动状态 (如果启用)
+                # 查询运动状态
                 if self.update_motion:
                     axis = axes[axis_idx]
                     if axis == "Z":
@@ -45,15 +49,15 @@ class StatusQueryThread(QThread):
                         reach = self.query_status(f"READ:MOTion:FEED? {axis}")
                         home = self.query_status(f"READ:MOTion:HOME? {axis}")
                         speed = self.query_status(f"READ:MOTion:SPEED? {axis}")
- 
+
                     status["motion"][axis] = {
                         "reach": reach,
                         "home": home,
                         "speed": speed
                     }
- 
-                # 查询信号源状态 (如果启用)
-                if self.update_source:
+
+                # 查询信号源状态
+                if self.update_source and axis_idx < 3:
                     if axis_idx == 0:
                         freq = self.query_status("READ:SOURce:FREQuency?")
                         status["src"]["freq"] = freq
@@ -69,16 +73,46 @@ class StatusQueryThread(QThread):
             finally:
                 self.mutex.unlock()
                 
-            if status["motion"] or status["src"]:  # 只有有数据时才发送
+            if status["motion"] or status["src"]:
                 self.status_signal.emit(status)
                 
             axis_idx = (axis_idx + 1) % len(axes)
             
-            # 细粒度sleep，保证stop及时
+            # 细粒度sleep，保证响应及时
             for _ in range(5):
-                if not self._running:
+                if not self._running or self._paused:
                     break
                 time.sleep(0.05)
+
+    def pause(self):
+        """暂停线程"""
+        self.mutex.lock()
+        try:
+            self._paused = True
+        finally:
+            self.mutex.unlock()
+
+    def resume(self):
+        """恢复线程"""
+        self.mutex.lock()
+        try:
+            self._paused = False
+            self.condition.wakeAll()  # 唤醒等待的线程
+        finally:
+            self.mutex.unlock()
+
+    def stop(self):
+        """安全停止线程"""
+        self._running = False
+        self.resume()  # 确保线程能退出
+        if self.socket:
+            try:
+                self.socket.shutdown(socket.SHUT_RDWR)
+                self.socket.close()
+            except:
+                pass
+            self.socket = None
+        self.wait(5000)  # 等待线程结束，最多5秒
 
     # 新增方法：控制状态更新开关
     def set_update_flags(self, motion=None, source=None):
@@ -91,7 +125,6 @@ class StatusQueryThread(QThread):
             self.update_motion = motion
         if source is not None:
             self.update_source = source
-
 
     def query_status(self, cmd, max_retries=3, base_timeout=1.0):
         """带超时重发机制的查询方法"""
@@ -175,15 +208,3 @@ class StatusQueryThread(QThread):
             error_msg += f": {str(last_exception)}"
         
         return "ERROR"
-
-    def stop(self):
-        """安全停止线程"""
-        self._running = False
-        if self.socket:  # 如果socket存在，则关闭它以中断阻塞的recv
-            try:
-                self.socket.shutdown(socket.SHUT_RDWR)
-                self.socket.close()
-            except:
-                pass
-            self.socket = None
-        self.wait(5000)  # 等待线程结束，最多5秒
