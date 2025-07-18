@@ -112,16 +112,7 @@ class MainWindowUI(QMainWindow):
         self.addToolBar(Qt.TopToolBarArea, self.toolbar)
         
         # 设置工具栏图标和文字都显示
-        self.toolbar.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-        
-        # 数据绘图
-        icon_path = "src/resources/icons/icon_plot.png"  # 使用实际路径
-        if Path(icon_path).exists():
-            self.plot_action = QAction(QIcon(icon_path), "数据绘图", self)
-        else:
-            self.plot_action = QAction("数据绘图", self)
-        self.plot_action.setStatusTip("打开数据绘图工具")
-        self.toolbar.addAction(self.plot_action)
+        # self.toolbar.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
         
         # 校准工具
         icon_path = "src/resources/icons/icon_calibration.png"
@@ -131,6 +122,15 @@ class MainWindowUI(QMainWindow):
             self.calibration_action = QAction("校准", self)
         self.calibration_action.setStatusTip("打开校准工具")
         self.toolbar.addAction(self.calibration_action)
+
+        # 数据绘图
+        icon_path = "src/resources/icons/icon_plot.png"  # 使用实际路径
+        if Path(icon_path).exists():
+            self.plot_action = QAction(QIcon(icon_path), "数据绘图", self)
+        else:
+            self.plot_action = QAction("数据绘图", self)
+        self.plot_action.setStatusTip("打开数据绘图工具")
+        self.toolbar.addAction(self.plot_action)
         
         # 添加分隔线
         self.toolbar.addSeparator()
@@ -178,101 +178,138 @@ class MainWindowUI(QMainWindow):
     def _setup_layout(self):
         """设置主布局"""
         main_layout = QHBoxLayout()
+        main_layout.setSpacing(10)  # 增加主布局间距
         
         # ==== 左侧面板 ====
         left_panel = QVBoxLayout()
+        left_panel.setSpacing(8)  # 减小左侧面板间距
         
-        # 链路图区域
+        # 链路图区域 - 使用固定高度
+        # 链路图区域 - 使用固定高度并确保居中
         link_group = QGroupBox("链路图")
         link_layout = QVBoxLayout(link_group)
-        center_layout = QHBoxLayout()
-        center_layout.addStretch()
-        center_layout.addWidget(self.link_diagram)
-        center_layout.addStretch()
-        link_layout.addLayout(center_layout)
-        left_panel.addWidget(link_group, stretch=3)
+        link_layout.setContentsMargins(5, 10, 5, 10)
         
-        # 日志区域
+        # 创建居中布局的容器
+        diagram_container = QWidget()
+        diagram_container_layout = QHBoxLayout(diagram_container)
+        self.link_diagram.setFixedHeight(470)  # 设置固定高度
+        diagram_container_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 添加伸缩因子使链路图居中
+        diagram_container_layout.addStretch()
+        diagram_container_layout.addWidget(self.link_diagram)
+        diagram_container_layout.addStretch()
+        
+        link_layout.addWidget(diagram_container)
+        left_panel.addWidget(link_group)
+            
+        # 日志区域 - 使用剩余空间
         log_group = QGroupBox("日志")
         log_layout = QVBoxLayout(log_group)
+        log_layout.setContentsMargins(5, 10, 5, 10)  # 减小内边距
         log_layout.addWidget(self.log_output)
-        left_panel.addWidget(log_group, stretch=2)
+        left_panel.addWidget(log_group, stretch=1)  # 使用拉伸因子
         
         main_layout.addLayout(left_panel, stretch=2)
         
         # ==== 右侧面板 ====
         right_panel = QVBoxLayout()
+        right_panel.setSpacing(8)  # 减小右侧面板间距
         
-        # 状态显示
+        # 状态显示 - 固定高度
         status_group = QGroupBox("状态显示")
         status_layout = QVBoxLayout(status_group)
+        status_layout.setContentsMargins(5, 10, 5, 10)
         status_layout.addWidget(self.status_panel)
         right_panel.addWidget(status_group)
         
-        right_panel.addSpacing(-20)
-        # ETH 设置
-        eth_group = QGroupBox()
+        # ETH 设置 - 紧凑布局
+        eth_group = QGroupBox("网络设置")
         eth_layout = QHBoxLayout(eth_group)
+        eth_layout.setContentsMargins(5, 10, 5, 10)
         eth_layout.addWidget(QLabel("ETH IP:"))
-        eth_layout.addWidget(self.eth_ip_input)
+        eth_layout.addWidget(self.eth_ip_input, stretch=1)  # 输入框可拉伸
         eth_layout.addWidget(QLabel("Port:"))
-        eth_layout.addWidget(self.eth_port_input)
+        eth_layout.addWidget(self.eth_port_input, stretch=1)
         eth_layout.addWidget(self.eth_connect_btn)
         eth_layout.addWidget(self.eth_disconnect_btn)
         eth_layout.addWidget(self.freq_feed_link_check)
-        eth_layout.addStretch()
         right_panel.addWidget(eth_group)
         
-        # 链路控制
+        # 链路控制 - 紧凑布局
         link_ctrl_group = QGroupBox("链路控制")
         link_ctrl_layout = QHBoxLayout(link_ctrl_group)
+        link_ctrl_layout.setContentsMargins(5, 10, 5, 10)
         link_ctrl_layout.addWidget(QLabel("链路模式:"))
-        link_ctrl_layout.addWidget(self.link_mode_combo)
+        link_ctrl_layout.addWidget(self.link_mode_combo, stretch=2)  # 组合框可拉伸
         link_ctrl_layout.addWidget(self.link_set_btn)
         link_ctrl_layout.addWidget(self.link_query_btn)
         right_panel.addWidget(link_ctrl_group)
         
-        # 信号源控制
+        # 信号源控制 - 紧凑网格布局
         src_group = QGroupBox("信号源控制")
         src_layout = QGridLayout(src_group)
+        src_layout.setContentsMargins(5, 10, 5, 10)
+        src_layout.setVerticalSpacing(8)  # 减小行间距
+        src_layout.setHorizontalSpacing(6)  # 减小列间距
+        
+        # 第一行 - 频率设置
         src_layout.addWidget(QLabel("信号频率:"), 0, 0)
         src_layout.addWidget(self.freq_input, 0, 1, 1, 2)
         src_layout.addWidget(self.freq_btn, 0, 3)
         src_layout.addWidget(self.freq_query_btn, 0, 4)
+        
+        # 第二行 - 功率设置
         src_layout.addWidget(QLabel("馈源功率:"), 1, 0)
         src_layout.addWidget(self.power_input, 1, 1)
         src_layout.addWidget(self.raw_power_input, 1, 2)
         src_layout.addWidget(self.power_btn, 1, 3)
         src_layout.addWidget(self.power_query_btn, 1, 4)
+        
+        # 第三行 - RF输出
         src_layout.addWidget(QLabel("RF输出:"), 2, 0)
         src_layout.addWidget(self.output_combo, 2, 1, 1, 2)
         src_layout.addWidget(self.output_btn, 2, 3)
         src_layout.addWidget(self.output_query_btn, 2, 4)
+        
         right_panel.addWidget(src_group)
         
-        # 运动控制
+        # 运动控制 - 紧凑网格布局
         self.motion_group = QGroupBox("运动控制")
         motion_layout = QGridLayout(self.motion_group)
+        motion_layout.setContentsMargins(5, 10, 5, 10)
+        motion_layout.setVerticalSpacing(8)
+        motion_layout.setHorizontalSpacing(6)
+        
+        # 第一行 - 复位
         motion_layout.addWidget(QLabel("复位:"), 0, 0)
         motion_layout.addWidget(self.home_combo, 0, 1)
         motion_layout.addWidget(self.home_btn, 0, 2)
         motion_layout.addWidget(self.home_query_btn, 0, 3)
+        
+        # 第二行 - 达位
         motion_layout.addWidget(QLabel("达位:"), 1, 0)
         motion_layout.addWidget(self.feed_combo, 1, 1)
         motion_layout.addWidget(self.feed_btn, 1, 2)
         motion_layout.addWidget(self.feed_query_btn, 1, 3)
+        
+        # 第三行 - 速度
         motion_layout.addWidget(QLabel("速度:"), 2, 0)
         motion_layout.addWidget(self.speed_mod_combo, 2, 1)
         motion_layout.addWidget(self.speed_combo, 2, 2)
         motion_layout.addWidget(self.speed_btn, 2, 3)
         motion_layout.addWidget(self.speed_query_btn, 2, 4)
+        
         right_panel.addWidget(self.motion_group)
         
         main_layout.addLayout(right_panel, stretch=3)
         
         # 设置中央控件布局
         layout = QVBoxLayout(self.central_widget)
+        layout.setContentsMargins(8, 8, 8, 8)  # 减小主窗口内边距
         layout.addLayout(main_layout)
+
 
     def _load_stylesheet(self):
         """加载样式表"""

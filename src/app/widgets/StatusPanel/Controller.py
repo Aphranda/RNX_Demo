@@ -153,7 +153,7 @@ class StatusPanelController(QObject):
         self.update_ui()
         
         # 启动超时定时器(30秒)
-        self.operation_timeout.start(30000)
+        self.operation_timeout.start(50000)
         
         # 发送实际的硬件命令
         cmd = f"MOTion:{'HOME' if operation == 'HOMING' else 'FEED'} {axis}"

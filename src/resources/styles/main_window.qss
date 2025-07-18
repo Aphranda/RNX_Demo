@@ -62,8 +62,8 @@ QLabel[statusValue="true"] {
     background: #f5faff;
     padding: 4px 10px;
     min-width: 60px;
-    min-height: 24px;
-    font-size: 24px;
+    min-height: 20px;
+    font-size: 20px;
     font-weight: bold;
     color: #42a5f5;
 }
@@ -73,7 +73,7 @@ QLabel[AutoScale="true"]:not(AutoFontSizeLabel) {
     background: #f5faff;
     padding: 4px 10px;
     min-width: 60px;
-    min-height: 24px;
+    min-height: 20px;
     font-weight: bold;
     color: #42a5f5;
 }
@@ -83,7 +83,7 @@ QLineEdit, QTextEdit {
     padding: 6px 10px;
     background: #f9f9f9;
     font-size: 24px;
-    min-height: 28px;
+    min-height: 24px;
     font-weight: bold;
 }
 QComboBox {
@@ -92,7 +92,7 @@ QComboBox {
     padding: 4px 8px 4px 8px;
     background: #f9f9f9;
     font-size: 24px;
-    min-height: 28px;
+    min-height: 24px;
     font-weight: bold;
 }
 QPushButton {
@@ -103,7 +103,7 @@ QPushButton {
     padding: 6px 18px;
     font-size: 24px;
     font-weight: bold;
-    min-height: 32px;
+    min-height: 24px;
 }
 QPushButton:hover {
     background: #1565c0;
