@@ -531,11 +531,58 @@ class MainWindow(MainWindowUI):
             if not target_axis:
                 return
                 
+            # 获取当前链路模式
+            current_link = self.parse_link_response(self.status_cache.get("src", {}).get("link", ""))
+            
+            # 构建新的链路模式
+            if target_axis == "X":
+                new_link = "FEED_X_THETA" if "THETA" in current_link else "FEED_X_PHI"
+            elif target_axis == "KU":
+                new_link = "FEED_KU_THETA" if "THETA" in current_link else "FEED_KU_PHI"
+            elif target_axis == "K":
+                new_link = "FEED_K_THETA" if "THETA" in current_link else "FEED_K_PHI"
+            elif target_axis == "KA":
+                new_link = "FEED_KA_THETA" if "THETA" in current_link else "FEED_KA_PHI"
+            else:
+                return
+                
+            # 更新当前馈源模式
+            self.current_feed_mode = new_link
+            
             # 使用状态机控制器请求达位
             self.status_panel._controller.request_feed(target_axis)
             
+            # 发送链路切换命令
+            self._send_link_command(new_link)
+            
         except ValueError:
             self.log("无效的频率格式", "ERROR")
+
+    def _send_link_command(self, link_mode):
+        """发送链路配置命令"""
+        cmd = f"CONFigure:LINK {link_mode}"
+        self.link_diagram.set_link(link_mode)  # 动态刷新链路图
+        
+        # 发送命令
+        self.send_and_log(cmd)
+        
+        # 更新频率显示
+        min_freq, max_freq = {
+            "FEED_X_THETA": (8.0, 12.0),
+            "FEED_X_PHI": (8.0, 12.0),
+            "FEED_KU_THETA": (12.0, 18.0),
+            "FEED_KU_PHI": (12.0, 18.0),
+            "FEED_K_THETA": (18.0, 26.5),
+            "FEED_K_PHI": (18.0, 26.5),
+            "FEED_KA_THETA": (26.5, 40.0),
+            "FEED_KA_PHI": (26.5, 40.0)
+        }.get(link_mode, (8.0, 12.0))
+        
+        center_freq = (min_freq + max_freq) / 2
+        self.freq_input.setText(f"{center_freq:.3f}GHz")
+        self.log(f"频率联动: 自动设置为{center_freq}GHz ({link_mode})", "INFO")
+
+
 
     def _determine_feed_axis(self, freq_ghz):
         """根据频率确定目标馈源轴"""
