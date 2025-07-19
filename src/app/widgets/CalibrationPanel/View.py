@@ -1,7 +1,7 @@
 # app/widgets/CalibrationPanel/View.py
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, 
-    QLabel, QPushButton, QDoubleSpinBox, QProgressBar
+    QLabel, QPushButton, QDoubleSpinBox, QProgressBar, QFormLayout, QLineEdit
 )
 from PyQt5.QtCore import Qt
 
@@ -9,10 +9,20 @@ class CalibrationView(QWidget):
     def __init__(self):
         super().__init__()
         
-        # 设备状态区域
+        # 主布局
+        self.main_layout = QVBoxLayout(self)
+        
+        # 设备状态区域 - 现在放在最前面
         self.device_group = QGroupBox("设备状态")
         self.power_meter_status = QLabel("功率计: 未连接")
         self.signal_gen_status = QLabel("信号源: 未连接")
+        
+        # 仪器地址组 - 放在设备状态下方
+        self.instr_group = QGroupBox("仪器连接")
+        self.signal_gen_address = QLineEdit("TCPIP0::192.168.1.10::inst0::INSTR")
+        self.power_meter_address = QLineEdit("TCPIP0::192.168.1.11::inst0::INSTR")
+        self.btn_connect = QPushButton("连接仪器")
+        self.btn_auto_detect = QPushButton("自动检测仪器")
         
         # 校准参数设置
         self.param_group = QGroupBox("校准参数")
@@ -29,8 +39,10 @@ class CalibrationView(QWidget):
         # 进度显示
         self.progress_bar = QProgressBar()
         self.current_step = QLabel("准备就绪")
-        
+
+        # 初始化UI
         self._setup_ui()
+        self._init_values()
 
     def _setup_ui(self):
         # 设备状态布局
@@ -38,6 +50,14 @@ class CalibrationView(QWidget):
         device_layout.addWidget(self.power_meter_status)
         device_layout.addWidget(self.signal_gen_status)
         self.device_group.setLayout(device_layout)
+
+        # 仪器地址布局
+        instr_layout = QFormLayout()
+        instr_layout.addRow("信号源地址:", self.signal_gen_address)
+        instr_layout.addRow("功率计地址:", self.power_meter_address)
+        instr_layout.addRow(self.btn_connect)
+        instr_layout.addRow(self.btn_auto_detect)
+        self.instr_group.setLayout(instr_layout)
 
         # 参数表格布局
         param_layout = QFormLayout()
@@ -53,16 +73,13 @@ class CalibrationView(QWidget):
         button_layout.addWidget(self.btn_stop)
         button_layout.addWidget(self.btn_export)
 
-        # 主布局
-        main_layout = QVBoxLayout()
-        main_layout.addWidget(self.device_group)
-        main_layout.addWidget(self.param_group)
-        main_layout.addLayout(button_layout)
-        main_layout.addWidget(self.progress_bar)
-        main_layout.addWidget(self.current_step)
-        
-        self.setLayout(main_layout)
-        self._init_values()
+        # 添加组件到主布局 - 设备状态在最前面
+        self.main_layout.addWidget(self.device_group)
+        self.main_layout.addWidget(self.instr_group)
+        self.main_layout.addWidget(self.param_group)
+        self.main_layout.addLayout(button_layout)
+        self.main_layout.addWidget(self.progress_bar)
+        self.main_layout.addWidget(self.current_step)
 
     def _init_values(self):
         # 初始化默认值

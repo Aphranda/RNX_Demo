@@ -1,76 +1,84 @@
 # app/widgets/CalibrationPanel/Controller.py
-import pandas as pd
 from PyQt5.QtCore import QObject, pyqtSignal
-from PyQt5.QtWidgets import QFileDialog
-from app.core.exceptions.calibration import CalibrationError
-from app.services.calibration import CalibrationService
+from app.utils.SignalUnitConverter import SignalUnitConverter
 
 class CalibrationController(QObject):
-    progress_updated = pyqtSignal(int, str)
-    calibration_finished = pyqtSignal(bool, str)
+    calibration_started = pyqtSignal()
+    calibration_stopped = pyqtSignal()
+    calibration_completed = pyqtSignal(dict)  # emits calibration data
+    instruments_connected = pyqtSignal()
     
-    def __init__(self, view):
+    def __init__(self, view, model):
         super().__init__()
-        self.view = view
-        self.service = CalibrationService()
+        self._view = view
+        self._model = model
+        self._log_callback = None
+        
+        # Connect signals
         self._connect_signals()
-
+        
     def _connect_signals(self):
-        self.view.btn_start.clicked.connect(self.start_calibration)
-        self.view.btn_stop.clicked.connect(self.stop_calibration)
-        self.view.btn_export.clicked.connect(self.export_data)
+        """Connect view signals to controller methods"""
+        self._view.btn_start.clicked.connect(self._on_start_calibration)
+        self._view.btn_stop.clicked.connect(self._on_stop_calibration)
+        self._view.btn_export.clicked.connect(self._on_export_data)
+        self._view.btn_connect.clicked.connect(self._on_connect_instruments)
+        self._view.btn_auto_detect.clicked.connect(self._on_auto_detect)
         
-        self.progress_updated.connect(self.view.progress_bar.setValue)
-        self.progress_updated.connect(self.view.current_step.setText)
-        self.calibration_finished.connect(self._on_finished)
-
-    def start_calibration(self):
-        params = {
-            'start_hz': self.view.start_freq.value() * 1e9,
-            'stop_hz': self.view.stop_freq.value() * 1e9,
-            'step_hz': self.view.step_freq.value() * 1e6,
-            'ref_power': self.view.ref_power.value()
-        }
+    def set_log_callback(self, callback):
+        """Set logging callback function"""
+        self._log_callback = callback
         
-        try:
-            self.service.start_async(
-                params=params,
-                progress_callback=self._update_progress,
-                finished_callback=self._on_calibration_done
-            )
-            self._set_controls_enabled(False)
-        except CalibrationError as e:
-            self.calibration_finished.emit(False, str(e))
-
-    def _update_progress(self, percent: int, message: str):
-        self.progress_updated.emit(percent, message)
-
-    def _on_calibration_done(self, success: bool, message: str):
-        self.calibration_finished.emit(success, message)
-
-    def _on_finished(self, success: bool, message: str):
-        self._set_controls_enabled(True)
-        if not success:
-            self.view.show_error(message)
-
-    def _set_controls_enabled(self, enabled: bool):
-        self.view.btn_start.setEnabled(enabled)
-        self.view.param_group.setEnabled(enabled)
-
-    def export_data(self):
-        if not hasattr(self, '_last_results'):
+    def _log(self, message, level='info'):
+        """Log a message using the callback if available"""
+        if self._log_callback:
+            self._log_callback(message, level)
+            
+    def _on_start_calibration(self):
+        """Handle start calibration button click"""
+        self._log("Starting calibration process...")
+        self.calibration_started.emit()
+        
+    def _on_stop_calibration(self):
+        """Handle stop calibration button click"""
+        self._log("Calibration stopped by user")
+        self.calibration_stopped.emit()
+        
+    def _on_export_data(self):
+        """Handle export data button click"""
+        self._log("Exporting calibration data...")
+        # TODO: Implement export functionality
+        
+    def _on_connect_instruments(self):
+        """Handle connect instruments button click"""
+        signal_gen_addr = self._view.signal_gen_address.text()
+        power_meter_addr = self._view.power_meter_address.text()
+        
+        self._log(f"Connecting to instruments: SignalGen={signal_gen_addr}, PowerMeter={power_meter_addr}")
+        # TODO: Implement actual connection logic
+        self.instruments_connected.emit()
+        
+    def _on_auto_detect(self):
+        """Handle auto detect instruments button click"""
+        self._log("Auto-detecting instruments...")
+        # TODO: Implement auto-detection logic
+        
+    def update_instrument_status(self, instrument_type: str, status: str, connected: bool):
+        """Update instrument status display"""
+        if instrument_type.lower() == 'signal_gen':
+            label = self._view.signal_gen_status
+        elif instrument_type.lower() == 'power_meter':
+            label = self._view.power_meter_status
+        else:
             return
             
-        path, _ = QFileDialog.getSaveFileName(
-            self.view, 
-            "导出校准数据", 
-            "", 
-            "CSV文件 (*.csv);;Excel文件 (*.xlsx)"
-        )
-        
-        if path:
-            df = pd.DataFrame([vars(p) for p in self._last_results])
-            if path.endswith('.csv'):
-                df.to_csv(path, index=False)
-            else:
-                df.to_excel(path, index=False)
+        label.setText(status)
+        if connected:
+            label.setStyleSheet("color: green;")
+        else:
+            label.setStyleSheet("color: red;")
+            
+    def update_progress(self, value: int, message: str):
+        """Update progress bar and status message"""
+        self._view.progress_bar.setValue(value)
+        self._view.current_step.setText(message)

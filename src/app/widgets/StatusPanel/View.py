@@ -56,17 +56,17 @@ class StatusPanelView(QWidget):
             
             self.motion_reach[axis] = QLabel("-")
             self.motion_reach[axis].setProperty("statusValue", True)
-            self.motion_reach[axis].setMinimumHeight(20)
+
             self.motion_grid.addWidget(self.motion_reach[axis], i+1, 1)
             
             self.motion_home[axis] = QLabel("-")
             self.motion_home[axis].setProperty("statusValue", True)
-            self.motion_home[axis].setMinimumHeight(20)
+
             self.motion_grid.addWidget(self.motion_home[axis], i+1, 2)
             
             self.motion_speed[axis] = QLabel("-")
             self.motion_speed[axis].setProperty("statusValue", True)
-            self.motion_speed[axis].setMinimumHeight(20)
+
 
             # 添加初始样式
             self.motion_speed[axis].setStyleSheet(
@@ -125,7 +125,7 @@ class StatusPanelView(QWidget):
 
         # 校准文件状态
         self.cal_file_status = AutoFontSizeLabel("Calib Miss")
-        self.cal_file_status.setProperty("AutoScale", True)
+        self.cal_file_status.setProperty("statusValue", True)
         self.cal_file_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.src_grid.addWidget(self.cal_file_status, 3, 2)
         

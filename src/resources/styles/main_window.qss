@@ -67,16 +67,7 @@ QLabel[statusValue="true"] {
     font-weight: bold;
     color: #42a5f5;
 }
-QLabel[AutoScale="true"]:not(AutoFontSizeLabel) {
-    border: 2px solid #42a5f5;
-    border-radius: 8px;
-    background: #f5faff;
-    padding: 4px 10px;
-    min-width: 60px;
-    min-height: 20px;
-    font-weight: bold;
-    color: #42a5f5;
-}
+
 QLineEdit, QTextEdit {
     border: 2px solid #b0b0b0;
     border-radius: 8px;

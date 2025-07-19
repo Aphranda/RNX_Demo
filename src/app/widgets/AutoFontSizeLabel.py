@@ -10,13 +10,14 @@ class AutoFontSizeLabel(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._min_font_size = 6
-        self._max_font_size = 24
-        self._default_font_size = 24  # 默认字体大小
+        self._max_font_size = 20
+        self._default_font_size = 20  # 默认字体大小
         self._content_margin = 10
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.setAlignment(Qt.AlignCenter)
         self.setProperty("class", "AutoFontSizeLabel")
         
+
         # 初始调整
         self.adjust_font_size()
  
@@ -82,6 +83,7 @@ class AutoFontSizeLabel(QLabel):
                 high = mid - 1   # 尝试更小的字体
         self.setFont(font)
         font.setPointSize(best_size)
+        
         return best_size
     
     def _apply_font_size(self, size):
@@ -90,15 +92,8 @@ class AutoFontSizeLabel(QLabel):
         self.setStyleSheet(f"""
             AutoFontSizeLabel {{
                 font-size: {size}pt;
-                border: 2px solid #42a5f5;
-                border-radius: 8px;
-                background: #f5faff;
                 background: {self.palette().color(self.backgroundRole()).name()};
-                padding: 4px 10px;
-                min-width: 60px;
-                min-height: 24px;
-                font-weight: bold;
-                color: #42a5f5;
                 color: {self.palette().color(self.foregroundRole()).name()};
             }}
         """)
+

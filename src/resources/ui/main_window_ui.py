@@ -11,6 +11,7 @@ from pathlib import Path
 from app.widgets.LogWidget.LogWidget import LogWidget
 from app.widgets.SimpleLinkDiagram import SimpleLinkDiagram
 from app.widgets.StatusPanel.StatusPanel import StatusPanel
+from app.widgets.CalibrationPanel.CalibrationPanel import CalibrationPanel
 
 class MainWindowUI(QMainWindow):
     def __init__(self):
@@ -48,6 +49,13 @@ class MainWindowUI(QMainWindow):
 
         # 状态面板
         self.status_panel = StatusPanel(self)
+
+        # 创建校准面板控制器
+        self.calibration_panel = CalibrationPanel(self)
+        self.calibration_panel.setWindowFlags(Qt.Window | Qt.WindowStaysOnTopHint)
+        self.calibration_panel.hide()  # 初始隐藏
+
+
         
         # ETH 设置控件
         self.eth_ip_input = QLineEdit()
@@ -335,3 +343,6 @@ class MainWindowUI(QMainWindow):
     def show_status(self, message):
         """在状态栏显示消息"""
         self.status_bar.showMessage(message)
+
+
+

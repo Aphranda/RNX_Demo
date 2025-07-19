@@ -1,14 +1,6 @@
 
-from PyQt5.QtWidgets import (
-    QMainWindow, QApplication, QStatusBar, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QComboBox, QLineEdit, QTextEdit, QGroupBox, QGridLayout, 
-    QSizePolicy, QMessageBox, QCheckBox, QToolBar, QAction, QFileDialog
-)
-from PyQt5.QtCore import Qt, QMutex, QFile,QTextStream
-from PyQt5.QtGui import QRegExpValidator
-from PyQt5.QtCore import QRegExp
+from PyQt5.QtCore import Qt, QMutex
 import sys, os
-from pathlib import Path
 
 # 添加项目根目录到系统路径
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -16,9 +8,8 @@ sys.path.insert(0, BASE_DIR)
 
 from resources.ui.main_window_ui import MainWindowUI
 
-from .threads.StatusQueryThread import StatusQueryThread
+from app.threads.StatusQueryThread import StatusQueryThread
 
-from .widgets.StatusPanel.StatusPanel import StatusPanel
 
 
 class MainWindow(MainWindowUI):
@@ -76,6 +67,8 @@ class MainWindow(MainWindowUI):
         self.status_panel._controller.motion_command.connect(self._send_motion_command)
         self.power_input.textChanged.connect(self.on_power_input_changed)
         self.raw_power_input.textChanged.connect(self.on_raw_power_input_changed)
+        #工具栏校准按钮
+        self.calibration_action.triggered.connect(self.show_calibration_panel)
         
         # 状态栏初始信息
         self.show_status("系统就绪。")
@@ -813,6 +806,19 @@ class MainWindow(MainWindowUI):
             val = status.get("src", {}).get(key)
             if val is not None:
                 self.status_cache["src"][key] = val
+
+
+    def show_calibration_panel(self):
+        """显示或隐藏校准面板"""
+        if self.calibration_panel.isVisible():
+            self.calibration_panel.hide()
+            self.calibration_action.setText("校准")  # 恢复按钮文本
+        else:
+            self.calibration_panel.show()
+            self.calibration_action.setText("关闭校准")  # 更新按钮文本
+            # 将校准面板置于前端
+            self.calibration_panel.raise_()
+            self.calibration_panel.activateWindow()
 
 
 

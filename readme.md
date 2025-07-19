@@ -1,11 +1,10 @@
 
 ```
 RNX_Demo
-├─ 📁build
+├─ 📁.vscode
 ├─ 📁calibrations
 │  ├─ 📁archive
 │  └─ 📁backup
-├─ 📁dist
 ├─ 📁docs
 │  ├─ 📄NRPxxSN_UserManual_en_25.pdf
 │  ├─ 📄RNX量子天线测试系统指令表.md
@@ -50,6 +49,8 @@ RNX_Demo
 │  │  │  └─ 📄SignalUnitConverter.py
 │  │  ├─ 📁widgets
 │  │  │  ├─ 📁CalibrationPanel
+│  │  │  │  ├─ 📁__pycache__
+│  │  │  │  ├─ 📄CalibrationPanel.py
 │  │  │  │  ├─ 📄Controller.py
 │  │  │  │  ├─ 📄Model.py
 │  │  │  │  └─ 📄View.py
@@ -73,11 +74,15 @@ RNX_Demo
 │  │  │  └─ 📄SimpleLinkDiagram.py
 │  │  ├─ 📁__pycache__
 │  │  └─ 📄main_window.py
+│  ├─ 📁debug
+│  │  ├─ 📄debug_calibration_panel.py
+│  │  ├─ 📄RNX_Demo_TEST.py
+│  │  └─ 📄test_mian.py
 │  ├─ 📁resources
 │  │  ├─ 📁icons
-│  │  │  ├─ 📄icon-help.png
 │  │  │  ├─ 📄icon_calibration.png
 │  │  │  ├─ 📄icon_export.png
+│  │  │  ├─ 📄icon_help.png
 │  │  │  ├─ 📄icon_import.png
 │  │  │  ├─ 📄icon_plot.png
 │  │  │  ├─ 📄icon_RNX_01.ico
@@ -88,9 +93,7 @@ RNX_Demo
 │  │  │  ├─ 📁__pycache__
 │  │  │  └─ 📄main_window_ui.py
 │  │  └─ 📄resources.qrc
-│  ├─ 📁test
-│  │  ├─ 📄RNX_Demo_TEST.py
-│  │  └─ 📄test_mian.py
+│  ├─ 📁__pycache__
 │  ├─ 📄.mian.py.lock
 │  ├─ 📄mian.py
 │  └─ 📄__init__.py
