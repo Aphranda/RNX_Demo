@@ -1,5 +1,6 @@
 # app/widgets/CalibrationPanel/CalibrationPanel.py
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
+from PyQt5.QtCore import Qt
 from .View import CalibrationView
 from .Model import CalibrationModel
 from .Controller import CalibrationController
@@ -21,6 +22,20 @@ class CalibrationPanel(QWidget):
         # Connect parent's log if available
         if hasattr(parent, 'log'):
             self._controller.set_log_callback(parent.log)
+
+    def show(self):
+        """类型安全的窗口标志设置（显式构造QFlags方式）"""
+        # 显式构造WindowFlags对象
+        flags = Qt.WindowFlags(Qt.WindowType.Window)
+        flags |= Qt.WindowFlags(Qt.WindowType.CustomizeWindowHint)
+        flags |= Qt.WindowFlags(Qt.WindowType.WindowTitleHint)
+        flags |= Qt.WindowFlags(Qt.WindowType.WindowMinimizeButtonHint)
+        flags |= Qt.WindowFlags(Qt.WindowType.WindowCloseButtonHint)
+        
+        self._view.setWindowFlags(flags)
+          
+        self._view.show()
+        
 
     # Property accessors
     @property

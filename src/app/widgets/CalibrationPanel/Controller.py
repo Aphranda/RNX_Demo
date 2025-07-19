@@ -1,84 +1,101 @@
 # app/widgets/CalibrationPanel/Controller.py
 from PyQt5.QtCore import QObject, pyqtSignal
-from app.utils.SignalUnitConverter import SignalUnitConverter
+from PyQt5.QtWidgets import QMessageBox
 
 class CalibrationController(QObject):
-    calibration_started = pyqtSignal()
-    calibration_stopped = pyqtSignal()
-    calibration_completed = pyqtSignal(dict)  # emits calibration data
-    instruments_connected = pyqtSignal()
-    
+    # 定义信号
+    connect_instruments = pyqtSignal(str, str)  # (signal_gen, power_meter)
+    auto_detect_instruments = pyqtSignal()
+    start_calibration = pyqtSignal(float, float, float, float)  # (start, stop, step, ref)
+    stop_calibration = pyqtSignal()
+    export_data = pyqtSignal()
+
     def __init__(self, view, model):
         super().__init__()
         self._view = view
         self._model = model
         self._log_callback = None
         
-        # Connect signals
+        # 连接信号
         self._connect_signals()
         
+        # 初始化按钮状态
+        self._update_button_states()
+
     def _connect_signals(self):
-        """Connect view signals to controller methods"""
-        self._view.btn_start.clicked.connect(self._on_start_calibration)
-        self._view.btn_stop.clicked.connect(self._on_stop_calibration)
-        self._view.btn_export.clicked.connect(self._on_export_data)
-        self._view.btn_connect.clicked.connect(self._on_connect_instruments)
-        self._view.btn_auto_detect.clicked.connect(self._on_auto_detect)
-        
+        """连接所有UI信号"""
+        self._view.btn_connect.clicked.connect(self._on_connect)
+        self._view.btn_auto_detect.clicked.connect(self.auto_detect_instruments.emit)
+        self._view.btn_start.clicked.connect(self._on_start)
+        self._view.btn_stop.clicked.connect(self.stop_calibration.emit)
+        self._view.btn_export.clicked.connect(self.export_data.emit)
+
     def set_log_callback(self, callback):
-        """Set logging callback function"""
+        """设置日志回调"""
         self._log_callback = callback
-        
-    def _log(self, message, level='info'):
-        """Log a message using the callback if available"""
+
+    def _log(self, message, level='INFO'):
+        """记录日志"""
         if self._log_callback:
             self._log_callback(message, level)
-            
-    def _on_start_calibration(self):
-        """Handle start calibration button click"""
-        self._log("Starting calibration process...")
-        self.calibration_started.emit()
+
+    def _on_connect(self):
+        """处理仪器连接"""
+        sig_gen = self._view.signal_gen_address.text().strip()
+        power_meter = self._view.power_meter_address.text().strip()
         
-    def _on_stop_calibration(self):
-        """Handle stop calibration button click"""
-        self._log("Calibration stopped by user")
-        self.calibration_stopped.emit()
-        
-    def _on_export_data(self):
-        """Handle export data button click"""
-        self._log("Exporting calibration data...")
-        # TODO: Implement export functionality
-        
-    def _on_connect_instruments(self):
-        """Handle connect instruments button click"""
-        signal_gen_addr = self._view.signal_gen_address.text()
-        power_meter_addr = self._view.power_meter_address.text()
-        
-        self._log(f"Connecting to instruments: SignalGen={signal_gen_addr}, PowerMeter={power_meter_addr}")
-        # TODO: Implement actual connection logic
-        self.instruments_connected.emit()
-        
-    def _on_auto_detect(self):
-        """Handle auto detect instruments button click"""
-        self._log("Auto-detecting instruments...")
-        # TODO: Implement auto-detection logic
-        
-    def update_instrument_status(self, instrument_type: str, status: str, connected: bool):
-        """Update instrument status display"""
-        if instrument_type.lower() == 'signal_gen':
-            label = self._view.signal_gen_status
-        elif instrument_type.lower() == 'power_meter':
-            label = self._view.power_meter_status
-        else:
+        if not sig_gen or not power_meter:
+            QMessageBox.warning(self._view, "警告", "请输入仪器地址")
             return
             
-        label.setText(status)
-        if connected:
-            label.setStyleSheet("color: green;")
-        else:
-            label.setStyleSheet("color: red;")
+        self.connect_instruments.emit(sig_gen, power_meter)
+
+    def _on_start(self):
+        """处理开始校准"""
+        start = self._view.start_freq.value()
+        stop = self._view.stop_freq.value()
+        step = self._view.step_freq.value()
+        ref = self._view.ref_power.value()
+        
+        if start >= stop:
+            QMessageBox.warning(self._view, "警告", "终止频率必须大于起始频率")
+            return
             
-    def update_progress(self, value: int, message: str):
-        """Update progress bar and status message"""
+        self.start_calibration.emit(start, stop, step, ref)
+
+    def update_instrument_status(self, instrument_type, connected, info=""):
+        """更新仪器状态显示"""
+        if instrument_type == 'signal_gen':
+            label = self._view.signal_gen_status
+            status = "已连接" if connected else "未连接"
+            if info:
+                status += f" ({info})"
+            label.setText(f"信号源: {status}")
+        elif instrument_type == 'power_meter':
+            label = self._view.power_meter_status
+            status = "已连接" if connected else "未连接"
+            if info:
+                status += f" ({info})"
+            label.setText(f"功率计: {status}")
+        
+        self._update_button_states()
+
+    def update_progress(self, value, message):
+        """更新进度"""
         self._view.progress_bar.setValue(value)
         self._view.current_step.setText(message)
+        self._update_button_states()
+
+    def _update_button_states(self):
+        """根据状态更新按钮可用性"""
+        is_running = 0 < self._view.progress_bar.value() < 100
+        is_connected = all([
+            "已连接" in self._view.signal_gen_status.text(),
+            "已连接" in self._view.power_meter_status.text()
+        ])
+        
+        self._view.btn_start.setEnabled(not is_running and is_connected)
+        self._view.btn_stop.setEnabled(is_running)
+        self._view.btn_export.setEnabled(
+            self._view.progress_bar.value() == 100
+        )

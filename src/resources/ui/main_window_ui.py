@@ -18,6 +18,14 @@ class MainWindowUI(QMainWindow):
         super().__init__()
         self.setWindowTitle("RNX Quantum Antenna Test System - Demo")
         self.setGeometry(50, 40, 1800, 1100)
+
+
+        # 设置窗口图标
+        icon_path = "src/resources/icons/icon_RNX_01.ico"
+        if Path(icon_path).exists():
+            self.setWindowIcon(QIcon(icon_path))
+        else:
+            print(f"警告: 图标文件未找到 - {icon_path}")
         
         # 初始化 UI 控件
         self._init_ui_components()
@@ -52,11 +60,11 @@ class MainWindowUI(QMainWindow):
 
         # 创建校准面板控制器
         self.calibration_panel = CalibrationPanel(self)
-        self.calibration_panel.setWindowFlags(Qt.Window | Qt.WindowStaysOnTopHint)
+        flags = Qt.WindowFlags(Qt.WindowType.Window) | Qt.WindowFlags(Qt.WindowType.WindowStaysOnTopHint)
+        self.calibration_panel.setWindowFlags(flags)
         self.calibration_panel.hide()  # 初始隐藏
 
 
-        
         # ETH 设置控件
         self.eth_ip_input = QLineEdit()
         self.eth_ip_input.setPlaceholderText("192.168.1.11")

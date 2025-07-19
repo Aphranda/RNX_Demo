@@ -69,6 +69,8 @@ class MainWindow(MainWindowUI):
         self.raw_power_input.textChanged.connect(self.on_raw_power_input_changed)
         #工具栏校准按钮
         self.calibration_action.triggered.connect(self.show_calibration_panel)
+
+ 
         
         # 状态栏初始信息
         self.show_status("系统就绪。")
