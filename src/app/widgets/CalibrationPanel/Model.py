@@ -1,6 +1,6 @@
 # app/widgets/CalibrationPanel/Model.py
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 from datetime import datetime
 
 @dataclass
@@ -10,18 +10,27 @@ class InstrumentInfo:
     connected: bool = False
 
 @dataclass
+class FrequencyParams:
+    start_ghz: Optional[float] = None
+    stop_ghz: Optional[float] = None
+    step_ghz: Optional[float] = None
+    freq_list: Optional[List[float]] = None
+
+@dataclass
 class CalibrationData:
     frequencies: List[float]  # GHz
     measured_powers: List[float]  # dBm
     reference_power: float  # dBm
     timestamp: str
     instrument_info: Dict[str, str]
+    frequency_mode: str  # "range" 或 "list"
 
 class CalibrationModel:
     def __init__(self):
         self._data: Optional[CalibrationData] = None
         self.signal_gen = InstrumentInfo(address="", model="")
         self.power_meter = InstrumentInfo(address="", model="")
+        self._freq_list: List[float] = []
         
     @property
     def calibration_data(self) -> Optional[CalibrationData]:
@@ -31,6 +40,14 @@ class CalibrationModel:
     def calibration_data(self, data: CalibrationData):
         self._data = data
         
+    @property
+    def freq_list(self) -> List[float]:
+        return self._freq_list
+        
+    @freq_list.setter
+    def freq_list(self, freq_list: List[float]):
+        self._freq_list = sorted(freq_list)
+
     def update_instrument(self, instrument_type: str, address: str, model: str, connected: bool):
         """更新仪器信息"""
         if instrument_type == 'signal_gen':

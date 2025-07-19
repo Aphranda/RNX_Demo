@@ -2,7 +2,7 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, 
     QLabel, QPushButton, QDoubleSpinBox, QProgressBar, 
-    QFormLayout, QLineEdit
+    QFormLayout, QLineEdit, QRadioButton, QButtonGroup
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
@@ -26,7 +26,7 @@ class CalibrationView(QWidget):
             Qt.WindowMinimizeButtonHint |
             Qt.WindowCloseButtonHint
         )
-        self.setFixedSize(600, 700)
+        self.setFixedSize(600, 800)  # 增加高度以容纳新控件
         
         # 设置窗口图标
         icon_path = "src/resources/icons/icon_calibration.png"
@@ -47,12 +47,27 @@ class CalibrationView(QWidget):
         self.btn_connect = QPushButton("连接仪器")
         self.btn_auto_detect = QPushButton("自动检测仪器")
         
+        # 频率模式选择
+        self.mode_group = QGroupBox("频率模式")
+        self.range_mode = QRadioButton("频率范围模式")
+        self.list_mode = QRadioButton("频点列表模式")
+        self.range_mode.setChecked(True)
+        self.mode_button_group = QButtonGroup()
+        self.mode_button_group.addButton(self.range_mode)
+        self.mode_button_group.addButton(self.list_mode)
+        
         # 校准参数
         self.param_group = QGroupBox("校准参数")
         self.start_freq = QDoubleSpinBox()
         self.stop_freq = QDoubleSpinBox()
         self.step_freq = QDoubleSpinBox()
         self.ref_power = QDoubleSpinBox()
+        
+        # 频点列表控件
+        self.freq_list_group = QGroupBox("频点列表")
+        self.freq_list_info = QLabel("未导入频点列表")
+        self.btn_import = QPushButton("导入频点列表")
+        self.btn_import.setEnabled(True)
         
         # 控制按钮
         self.btn_start = QPushButton("开始校准")
@@ -97,6 +112,12 @@ class CalibrationView(QWidget):
         instr_layout.addRow(self.btn_auto_detect)
         self.instr_group.setLayout(instr_layout)
         
+        # 频率模式布局
+        mode_layout = QHBoxLayout()
+        mode_layout.addWidget(self.range_mode)
+        mode_layout.addWidget(self.list_mode)
+        self.mode_group.setLayout(mode_layout)
+        
         # 参数布局
         param_layout = QFormLayout()
         param_layout.addRow("起始频率 (GHz):", self.start_freq)
@@ -104,6 +125,12 @@ class CalibrationView(QWidget):
         param_layout.addRow("步进 (MHz):", self.step_freq)
         param_layout.addRow("参考功率 (dBm):", self.ref_power)
         self.param_group.setLayout(param_layout)
+        
+        # 频点列表布局
+        freq_list_layout = QVBoxLayout()
+        freq_list_layout.addWidget(self.freq_list_info)
+        freq_list_layout.addWidget(self.btn_import)
+        self.freq_list_group.setLayout(freq_list_layout)
         
         # 按钮布局
         button_layout = QHBoxLayout()
@@ -114,7 +141,18 @@ class CalibrationView(QWidget):
         # 主布局
         self.main_layout.addWidget(self.device_group)
         self.main_layout.addWidget(self.instr_group)
+        self.main_layout.addWidget(self.mode_group)
         self.main_layout.addWidget(self.param_group)
+        self.main_layout.addWidget(self.freq_list_group)
         self.main_layout.addLayout(button_layout)
         self.main_layout.addWidget(self.progress_bar)
         self.main_layout.addWidget(self.current_step)
+        
+        # 初始状态
+        self._update_mode_visibility()
+
+    def _update_mode_visibility(self):
+        """根据选择的模式显示/隐藏相关控件"""
+        is_range_mode = self.range_mode.isChecked()
+        self.param_group.setVisible(is_range_mode)
+        self.freq_list_group.setVisible(not is_range_mode)

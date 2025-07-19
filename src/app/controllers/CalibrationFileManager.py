@@ -1,23 +1,10 @@
-from PyQt5.QtWidgets import (
-    QMainWindow, QApplication, QStatusBar, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QComboBox, QLineEdit, QTextEdit, QGroupBox, QGridLayout, 
-    QSizePolicy, QMessageBox, QCheckBox, QToolBar, QAction, QFileDialog
-)
-from PyQt5.QtGui import QFont, QColor, QPainter, QPen, QFontMetrics, QTextCursor, QTextCharFormat, QIcon
-from PyQt5.QtCore import Qt, QPointF, QThread, pyqtSignal, QMutex, QSize
-from PyQt5.QtGui import QRegExpValidator
-from PyQt5.QtCore import QRegExp
-import sys, os, psutil
-import socket, select
-import datetime
-import time
-import atexit
+import os
 import hashlib
 import shutil
-import json, struct
-import math
+import json
+import struct
 import threading
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timezone
 
 class CalibrationFileManager:
@@ -79,7 +66,7 @@ class CalibrationFileManager:
                 
                 # 写入数据点
                 for point in self._data_points:
-                    freq = point['freq']
+                    freq = round(point['freq'], 6)  # 确保频率保留6位小数
                     data = [
                         point['x_theta'], point['x_phi'],
                         point['ku_theta'], point['ku_phi'],
@@ -95,6 +82,7 @@ class CalibrationFileManager:
         except Exception as e:
             self.log(f"生成二进制文件失败: {str(e)}", "ERROR")
             return None
+
         
     def generate_default_calibration(self, freq_range: Tuple[float, float] = (8.0, 40.0), 
                                 step: float = 0.01) -> str:
@@ -254,13 +242,13 @@ class CalibrationFileManager:
         
         # 存储数据点用于BIN文件
         self._data_points.append({
-            'freq': freq_ghz,
+            'freq': round(freq_ghz, 6),  # 确保频率保留6位小数
             **data
         })
         
-        # 格式化数据行
+        # 格式化数据行 - 修改这里，将:.3f改为:.6f
         data_row = (
-            f"{freq_ghz:.3f},"
+            f"{freq_ghz:.6f},"  # 修改为保留6位小数
             f"{data.get('x_theta', -99.99):.2f},"
             f"{data.get('x_phi', -99.99):.2f},"
             f"{data.get('ku_theta', -99.99):.2f},"
@@ -276,6 +264,7 @@ class CalibrationFileManager:
             f.write(data_row)
         
         return True
+
     
     def finalize_calibration(self, notes: str = "") -> Tuple[str, str]:
         """
