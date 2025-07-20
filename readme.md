@@ -1,15 +1,19 @@
 
 ```
 RNX_Demo
+├─ 📁.idea
 ├─ 📁.vscode
+├─ 📁build
 ├─ 📁calibrations
 │  ├─ 📁archive
 │  └─ 📁backup
+├─ 📁dist
 ├─ 📁docs
 │  ├─ 📄NRPxxSN_UserManual_en_25.pdf
 │  ├─ 📄RNX量子天线测试系统指令表.md
 │  ├─ 📄RNX量子天线测试系统指令表.pdf
 │  ├─ 📄RNX量子天线测试系统链路图.png
+│  ├─ 📄WD-25045 PLASG-T8G40G 信号发生器 软件编程手册(1).pdf
 │  └─ 📄频率分配.png
 ├─ 📁scripts
 │  └─ 📄Doicon.py
@@ -20,6 +24,7 @@ RNX_Demo
 │  │  │  └─ 📄CalibrationFileManager.py
 │  │  ├─ 📁core
 │  │  │  ├─ 📁exceptions
+│  │  │  │  ├─ 📁__pycache__
 │  │  │  │  ├─ 📄base.py
 │  │  │  │  ├─ 📄calibration.py
 │  │  │  │  ├─ 📄instrument.py
@@ -32,16 +37,16 @@ RNX_Demo
 │  │  ├─ 📁dialogs
 │  │  │  └─ 📄__init__.py
 │  │  ├─ 📁instruments
+│  │  │  ├─ 📁__pycache__
 │  │  │  ├─ 📄factory.py
 │  │  │  ├─ 📄interfaces.py
 │  │  │  ├─ 📄nrp50s.py
 │  │  │  └─ 📄plasg_signal_source.py
 │  │  ├─ 📁models
 │  │  │  └─ 📄__init__.py
-│  │  ├─ 📁services
-│  │  │  └─ 📄calibration.py
 │  │  ├─ 📁threads
 │  │  │  ├─ 📁__pycache__
+│  │  │  ├─ 📄CalibrationThread.py
 │  │  │  └─ 📄StatusQueryThread.py
 │  │  ├─ 📁utils
 │  │  │  ├─ 📁__pycache__
@@ -93,7 +98,6 @@ RNX_Demo
 │  │  │  ├─ 📁__pycache__
 │  │  │  └─ 📄main_window_ui.py
 │  │  └─ 📄resources.qrc
-│  ├─ 📁__pycache__
 │  ├─ 📄.mian.py.lock
 │  ├─ 📄mian.py
 │  └─ 📄__init__.py

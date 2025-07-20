@@ -5,16 +5,26 @@ from PyQt5.QtWidgets import (
     QFormLayout, QLineEdit, QRadioButton, QButtonGroup
 )
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QIcon,QColor
 from pathlib import Path
 
 class CalibrationView(QWidget):
     def __init__(self):
         super().__init__()
+
+        # 状态颜色定义
+        self._status_colors = {
+            'connected': QColor(0, 180, 0),    # 绿色
+            'disconnected': QColor(180, 0, 0), # 红色
+            'detecting': QColor(255, 165, 0),  # 橙色
+            'error': QColor(255, 0, 0),       # 红色
+            'default': QColor(0, 0, 0)        # 黑色
+        }
         
         self._init_ui_components()
         self._setup_ui_layout()
         self._setup_window_properties()
+
 
     def _setup_window_properties(self):
         """只设置窗口显示属性"""
@@ -26,7 +36,7 @@ class CalibrationView(QWidget):
             Qt.WindowMinimizeButtonHint |
             Qt.WindowCloseButtonHint
         )
-        self.setFixedSize(600, 800)  # 增加高度以容纳新控件
+        self.setFixedSize(700, 900)  # 增加高度以容纳新控件
         
         # 设置窗口图标
         icon_path = "src/resources/icons/icon_calibration.png"
@@ -39,9 +49,18 @@ class CalibrationView(QWidget):
         self.device_group = QGroupBox("设备状态")
         self.power_meter_status = QLabel("功率计: 未连接")
         self.signal_gen_status = QLabel("信号源: 未连接")
+
+        self.antenna_model = QLineEdit("RNX_ANT")
+        self.antenna_model.setPlaceholderText("天线型号")
+        self.antenna_sn = QLineEdit("SN00000")
+        self.antenna_sn.setPlaceholderText("天线序列号")
         
         # 仪器连接
         self.instr_group = QGroupBox("仪器连接")
+        self.signal_gen_name = QLineEdit("PLASG")  # 新增信号源名称输入
+        self.signal_gen_name.setPlaceholderText("信号源型号(如PLASG)")
+        self.power_meter_name = QLineEdit("NRP50S")  # 新增功率计名称输入
+        self.power_meter_name.setPlaceholderText("功率计型号(如NRP50S)")
         self.signal_gen_address = QLineEdit("TCPIP0::192.168.1.10::inst0::INSTR")
         self.power_meter_address = QLineEdit("TCPIP0::192.168.1.11::inst0::INSTR")
         self.btn_connect = QPushButton("连接仪器")
@@ -87,8 +106,8 @@ class CalibrationView(QWidget):
         self.start_freq.setValue(8.0)
         self.stop_freq.setRange(0.1, 40)
         self.stop_freq.setValue(40.0)
-        self.step_freq.setRange(1, 1000)
-        self.step_freq.setValue(100)
+        self.step_freq.setRange(0.01, 1)
+        self.step_freq.setValue(0.01)
         self.ref_power.setRange(-50, 10)
         self.ref_power.setValue(-10.0)
         self.progress_bar.setRange(0, 100)
@@ -103,11 +122,17 @@ class CalibrationView(QWidget):
         device_layout.addWidget(self.power_meter_status)
         device_layout.addWidget(self.signal_gen_status)
         self.device_group.setLayout(device_layout)
-        
+
         # 仪器连接布局
         instr_layout = QFormLayout()
+        instr_layout.addRow("信号源型号:", self.signal_gen_name)  # 新增行
         instr_layout.addRow("信号源地址:", self.signal_gen_address)
+        instr_layout.addRow("功率计型号:", self.power_meter_name)  # 新增行
         instr_layout.addRow("功率计地址:", self.power_meter_address)
+
+        # 在仪器连接布局中添加天线信息行
+        instr_layout.addRow("天线型号:", self.antenna_model)
+        instr_layout.addRow("天线序列号:", self.antenna_sn)
         instr_layout.addRow(self.btn_connect)
         instr_layout.addRow(self.btn_auto_detect)
         self.instr_group.setLayout(instr_layout)
@@ -122,7 +147,7 @@ class CalibrationView(QWidget):
         param_layout = QFormLayout()
         param_layout.addRow("起始频率 (GHz):", self.start_freq)
         param_layout.addRow("终止频率 (GHz):", self.stop_freq)
-        param_layout.addRow("步进 (MHz):", self.step_freq)
+        param_layout.addRow("步进 (GHz):", self.step_freq)
         param_layout.addRow("参考功率 (dBm):", self.ref_power)
         self.param_group.setLayout(param_layout)
         

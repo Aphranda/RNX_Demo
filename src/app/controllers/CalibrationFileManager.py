@@ -6,6 +6,7 @@ import struct
 import threading
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timezone
+from app.threads.CalibrationThread import CalibrationPoint
 
 class CalibrationFileManager:
     """
@@ -249,7 +250,7 @@ class CalibrationFileManager:
             f"!Operator: {meta['operator']}",
             "!Equipment:",
             f"!  Signal_Generator: {meta['signal_gen'][0]}_SN:{meta['signal_gen'][1]}",
-            f"!  Spectrum_Analyzer: {meta['spec_analyzer'][0]}_SN:{meta['spec_analyzer'][1]}",
+            f"!  Spectrum_Analyzer: {meta['power_meter'][0]}_SN:{meta['power_meter'][1]}",
             f"!  Antenna: {meta['antenna'][0]}_SN:{meta['antenna'][1]}",
             f"!Environment: {meta['environment'][0]}C, {meta['environment'][1]}%RH",
             "!Frequency:",
@@ -314,6 +315,33 @@ class CalibrationFileManager:
             f.write(data_row)
         
         return True
+
+
+    def add_calibration_point(self, point: 'CalibrationPoint') -> bool:
+        """
+        添加校准点数据
+        
+        :param point: CalibrationPoint对象，包含频率、功率等信息
+        :return: 是否成功添加
+        """
+        # 将CalibrationPoint转换为适合add_data_point的格式
+        # 这里假设CalibrationPoint有freq_hz(Hz单位)和measured_power(dBm)属性
+        freq_ghz = point.freq_hz / 1e9  # 转换为GHz
+        
+        # 创建一个包含所有必要字段的数据字典
+        # 注意：根据你的实际需求调整这些字段
+        data = {
+            'x_theta': point.measured_power,  # 示例：使用测量功率作为X_Theta
+            'x_phi': 0.0,                    # 其他字段设为默认值
+            'ku_theta': 0.0,
+            'ku_phi': 0.0,
+            'k_theta': 0.0,
+            'k_phi': 0.0,
+            'ka_theta': 0.0,
+            'ka_phi': 0.0
+        }
+        
+        return self.add_data_point(freq_ghz, data)
 
     
     def finalize_calibration(self, notes: str = "") -> Tuple[str, str]:
