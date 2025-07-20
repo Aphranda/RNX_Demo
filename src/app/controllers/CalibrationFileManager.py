@@ -134,7 +134,7 @@ class CalibrationFileManager:
                 'step_ghz': 0.1,  # 使用0表示自定义频点
                 'custom_freqs': valid_freqs  # 存储自定义频点
             }
-            self.points = len(valid_freqs)
+            points = len(valid_freqs)
         else:
             # 使用频率范围和步进
             start_ghz = min(freq_range)
@@ -206,10 +206,12 @@ class CalibrationFileManager:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%SZ")
         
         # 计算总点数
-        if self.points == 0:
+        if len(freq_params["custom_freqs"]) == 0:
             points = int((freq_params['stop_ghz'] - freq_params['start_ghz']) / freq_params['step_ghz']) + 1
         else:
-            points = self.points
+            points = len(freq_params["custom_freqs"])
+
+
         
         # 生成文件名
         filename = (

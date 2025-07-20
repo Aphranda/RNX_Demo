@@ -232,10 +232,10 @@ class CalibrationController(QObject):
             # 准备校准元数据
             equipment_meta = self._prepare_equipment_meta()
             freq_params = {
-                'freq_list': self._freq_list,
-                'min_freq': min(self._freq_list),
-                'max_freq': max(self._freq_list),
-                'count': len(self._freq_list)
+                'start_ghz': min(self._freq_list),
+                'stop_ghz': max(self._freq_list),
+                'step_ghz': 0.01,
+                'custom_freqs': self._freq_list,
             }
             
             # 创建校准文件
@@ -341,7 +341,7 @@ class CalibrationController(QObject):
         """更新进度显示"""
         self._view.progress_bar.setValue(value)
         self._view.current_step.setText(message)
-        self._update_button_states()
+        # self._update_button_states()
 
     def _save_calibration_point(self, point: CalibrationPoint):
         """保存单个校准点"""
@@ -394,11 +394,15 @@ class CalibrationController(QObject):
             )
             self._log(f"成功导入{freq_count}个频点", "INFO")
             
+            # 强制更新按钮状态
+            self._update_button_states()  # 新增这行
+            
         except Exception as e:
             self._log(f"导入频点列表失败: {str(e)}", "ERROR")
             QMessageBox.warning(self._view, "导入错误", f"导入频点列表失败:\n{str(e)}")
             self._freq_list = []
             self._view.freq_list_info.setText("未导入频点列表")
+            self._update_button_states()  # 失败时也更新状态
     # endregion
 
     # region UI状态管理
@@ -418,7 +422,7 @@ class CalibrationController(QObject):
     def _update_mode_ui(self, checked: bool):
         """更新频率模式UI"""
         self._view._update_mode_visibility()
-        self._update_button_states()
+        # self._update_button_states()  # 确保模式切换时更新按钮状态
 
     def _update_button_states(self):
         """根据当前状态更新按钮可用性"""
@@ -429,17 +433,24 @@ class CalibrationController(QObject):
         ])
         has_freq_list = bool(self._freq_list)
         
+        # 调试信息
+        self._log(f"更新按钮状态: 运行中={is_running}, 已连接={is_connected}, 有频点列表={has_freq_list}, 范围模式={self._view.range_mode.isChecked()}", "DEBUG")
+        
         # 更新按钮状态
         self._view.btn_connect.setEnabled(not is_running)
         self._view.btn_auto_detect.setEnabled(not is_running)
+        
+        # 修改这里：在频点列表模式下，只要仪器已连接且有频点列表，就启用开始按钮
         self._view.btn_start.setEnabled(not is_running and is_connected and 
-                                      (self._view.range_mode.isChecked() or has_freq_list))
+                                    (self._view.range_mode.isChecked() or has_freq_list))
+        
         self._view.btn_stop.setEnabled(is_running)
         self._view.btn_export.setEnabled(
             not is_running and 
             self._view.progress_bar.value() == 100
         )
         self._view.btn_import.setEnabled(not is_running)
+
     # endregion
 
     def get_current_freq_list(self) -> Optional[List[float]]:
