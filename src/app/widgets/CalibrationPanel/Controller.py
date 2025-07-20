@@ -211,7 +211,8 @@ class CalibrationController(QObject):
             freq_params = {
                 'start_ghz': start,
                 'stop_ghz': stop,
-                'step_ghz': step
+                'step_ghz': step,
+                'custom_freqs': []
             }
             
             # 创建校准文件
@@ -234,7 +235,7 @@ class CalibrationController(QObject):
             freq_params = {
                 'start_ghz': min(self._freq_list),
                 'stop_ghz': max(self._freq_list),
-                'step_ghz': 0.01,
+                'step_ghz': "NONE",
                 'custom_freqs': self._freq_list,
             }
             
@@ -250,9 +251,7 @@ class CalibrationController(QObject):
 
     def _start_calibration_process(self, start: float, stop: float, step: float, ref_power: float):
         """处理范围模式校准启动"""
-        print(step)
         freq_list = [start + i * step for i in range(int((stop - start) / step) + 1)]
-        print("freq_list",freq_list)
         self._execute_calibration(freq_list, ref_power)
 
     def _start_calibration_with_list_process(self, freq_list: List[float], ref_power: float):
@@ -341,12 +340,11 @@ class CalibrationController(QObject):
         """更新进度显示"""
         self._view.progress_bar.setValue(value)
         self._view.current_step.setText(message)
-        # self._update_button_states()
+        self._update_button_states()
 
     def _save_calibration_point(self, point: CalibrationPoint):
         """保存单个校准点"""
         self._model.add_calibration_point(point)
-        print("ponit:",point)
         self.cal_manager.add_calibration_point(point)
 
     def _on_calibration_finished(self, results: List[CalibrationPoint]):

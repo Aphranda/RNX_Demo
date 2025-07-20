@@ -109,7 +109,7 @@ class CalibrationView(QWidget):
         self.step_freq.setRange(0.01, 1)
         self.step_freq.setValue(0.01)
         self.ref_power.setRange(-50, 10)
-        self.ref_power.setValue(-10.0)
+        self.ref_power.setValue(-30.0)
         self.progress_bar.setRange(0, 100)
 
     def _setup_ui_layout(self):

@@ -198,12 +198,8 @@ class MainWindow(MainWindowUI):
         }
         
         if mode in freq_ranges:
-            self.current_feed_mode = mode
-            min_freq, max_freq = freq_ranges[mode]
-            center_freq = (min_freq + max_freq) / 2
-            self.freq_input.setText(f"{center_freq:.3f}GHz")
-            self.send_freq_cmd()
-            self.log(f"频率联动: 自动设置为{center_freq}GHz ({mode})", "INFO")
+            target_axis = mode.split("_")[1]
+            self.status_panel._controller.request_feed(target_axis)
 
 
     def is_valid_frequency(self, freq_str):
