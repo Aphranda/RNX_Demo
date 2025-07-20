@@ -25,6 +25,7 @@ class CalibrationFileManager:
         self.current_meta: Dict = {}
         self.data_points: List = []
         self._file_lock = threading.Lock()
+        self.points = 0
         
         os.makedirs(self.base_dir, exist_ok=True)
         
@@ -85,12 +86,13 @@ class CalibrationFileManager:
 
         
     def generate_default_calibration(self, freq_range: Tuple[float, float] = (8.0, 40.0), 
-                                step: float = 0.01) -> str:
+                                step: float = 0.01, freq_list: Optional[List[float]] = None) -> str:
         """
-        生成默认校准文件（所有参数为0），确保包含边界频率
+        生成默认校准文件（所有参数为0），支持频点列表或频率范围
         
-        :param freq_range: 频率范围(GHz) (start, stop)
-        :param step: 频率步进(GHz)
+        :param freq_range: 频率范围(GHz) (start, stop) - 当freq_list为None时使用
+        :param step: 频率步进(GHz) - 当freq_list为None时使用
+        :param freq_list: 自定义频点列表(GHz)，优先级高于freq_range和step
         :return: 生成的校准文件路径
         """
         # 默认设备元数据
@@ -102,46 +104,91 @@ class CalibrationFileManager:
             'environment': (25.0, 50.0)  # 25°C, 50%RH
         }
         
-        # 确保stop频率不小于start频率
-        start_ghz = min(freq_range)
-        stop_ghz = max(freq_range)
-        
-        # 频率参数
-        freq_params = {
-            'start_ghz': start_ghz,
-            'stop_ghz': stop_ghz,
-            'step_ghz': step
-        }
+        # 根据输入参数确定频率参数
+        if freq_list is not None:
+            # 使用自定义频点列表
+            if not isinstance(freq_list, list) or len(freq_list) == 0:
+                raise ValueError("freq_list必须是非空列表")
+            
+            # 确保所有频点都是数字且在合理范围内
+            valid_freqs = []
+            for freq in freq_list:
+                try:
+                    freq_float = float(freq)
+                    if 0.1 <= freq_float <= 100.0:  # 假设合理频率范围是0.1-100GHz
+                        valid_freqs.append(round(freq_float, 6))
+                    else:
+                        self.log(f"忽略超出范围的频率: {freq}GHz", "WARNING")
+                except ValueError:
+                    self.log(f"忽略无效的频率值: {freq}", "WARNING")
+            
+            if not valid_freqs:
+                raise ValueError("没有有效的频率点")
+            
+            # 对频点进行排序并去重
+            valid_freqs = sorted(list(set(valid_freqs)))
+            freq_params = {
+                'start_ghz': min(valid_freqs),
+                'stop_ghz': max(valid_freqs),
+                'step_ghz': 0.1,  # 使用0表示自定义频点
+                'custom_freqs': valid_freqs  # 存储自定义频点
+            }
+            self.points = len(valid_freqs)
+        else:
+            # 使用频率范围和步进
+            start_ghz = min(freq_range)
+            stop_ghz = max(freq_range)
+            step = abs(step)  # 确保步进为正
+            
+            # 计算精确的点数，避免浮点误差
+            points = int(round((stop_ghz - start_ghz) / step)) + 1
+            freq_params = {
+                'start_ghz': start_ghz,
+                'stop_ghz': stop_ghz,
+                'step_ghz': step,
+                'custom_freqs': None
+            }
         
         # 创建新校准文件
         filepath = self.create_new_calibration(
             equipment_meta=default_meta,
             freq_params=freq_params,
-            version_notes="系统生成的默认校准文件（所有参数为0）"
+            version_notes="系统生成的默认校准文件（所有参数为0）" + 
+                        (" [自定义频点]" if freq_list is not None else "")
         )
         
-        # 计算精确的点数，避免浮点误差
-        num_points = int(round((stop_ghz - start_ghz) / step)) + 1
-        
-        # 填充0值数据，确保包含边界频率
-        for i in range(num_points):
-            freq = start_ghz + i * step
-            # 处理浮点精度问题，确保最后一个点是stop_ghz
-            if i == num_points - 1:
-                freq = stop_ghz
-                
-            zero_data = {
-                'x_theta': 1.0, 'x_phi': 1.0,
-                'ku_theta': 1.0, 'ku_phi': 1.0,
-                'k_theta': 1.0, 'k_phi': 1.0,
-                'ka_theta': 1.0, 'ka_phi': 1.0
-            }
-            self.add_data_point(round(freq, 6), zero_data)  # 保留6位小数避免浮点误差
+        # 填充0值数据
+        if freq_list is not None:
+            # 使用自定义频点
+            for freq in valid_freqs:
+                zero_data = {
+                    'x_theta': 1.0, 'x_phi': 1.0,
+                    'ku_theta': 1.0, 'ku_phi': 1.0,
+                    'k_theta': 1.0, 'k_phi': 1.0,
+                    'ka_theta': 1.0, 'ka_phi': 1.0
+                }
+                self.add_data_point(freq, zero_data)
+        else:
+            # 使用频率范围和步进
+            for i in range(points):
+                freq = start_ghz + i * step
+                # 处理浮点精度问题，确保最后一个点是stop_ghz
+                if i == points - 1:
+                    freq = stop_ghz
+                    
+                zero_data = {
+                    'x_theta': 1.0, 'x_phi': 1.0,
+                    'ku_theta': 1.0, 'ku_phi': 1.0,
+                    'k_theta': 1.0, 'k_phi': 1.0,
+                    'ka_theta': 1.0, 'ka_phi': 1.0
+                }
+                self.add_data_point(round(freq, 6), zero_data)  # 保留6位小数避免浮点误差
         
         # 完成校准
         archived_path = self.finalize_calibration("系统自动生成的默认校准文件")
         
         return archived_path
+
 
     def create_new_calibration(self, 
                              equipment_meta: Dict, 
@@ -158,7 +205,10 @@ class CalibrationFileManager:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%SZ")
         
         # 计算总点数
-        points = int((freq_params['stop_ghz'] - freq_params['start_ghz']) / freq_params['step_ghz']) + 1
+        if self.points == 0:
+            points = int((freq_params['stop_ghz'] - freq_params['start_ghz']) / freq_params['step_ghz']) + 1
+        else:
+            points = self.points
         
         # 生成文件名
         filename = (

@@ -102,14 +102,14 @@ class CalibrationController(QObject):
         sig_gen = self._view.signal_gen_address.text().strip()
         power_meter = self._view.power_meter_address.text().strip()
         
-        try:
-            default_path = self.cal_manager.generate_default_calibration(
-                freq_range=(8.0, 8.00001),
-                step=0.000001
-            )
-            self._log(f"默认校准文件已生成: {default_path}", "INFO")
-        except Exception as e:
-            self._log(f"生成默认校准文件失败: {str(e)}", "ERROR")
+        # try:
+        default_path = self.cal_manager.generate_default_calibration(
+            freq_range=(8.0, 10),
+            step=0.01,
+        )
+        #     self._log(f"默认校准文件已生成: {default_path}", "INFO")
+        # except Exception as e:
+        #     self._log(f"生成默认校准文件失败: {str(e)}", "ERROR")
 
         if not sig_gen or not power_meter:
             QMessageBox.warning(self._view, "警告", "请输入仪器地址")
