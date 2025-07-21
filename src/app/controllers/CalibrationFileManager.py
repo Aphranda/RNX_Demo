@@ -1,4 +1,9 @@
 import os
+import csv
+import re
+from pathlib import Path
+import numpy as np
+import pandas as pd
 import hashlib
 import shutil
 import json
@@ -337,14 +342,14 @@ class CalibrationFileManager:
             phi_corr = point.measured_phi - point.ref_power
             
             # 计算V/M校正值（考虑天线增益和距离）
-            theta_vm = converter.dbm_to_dbuV_m(
+            theta_vm = converter.dbm_to_v_m(
                 dbm=point.measured_theta,
                 frequency=point.freq_hz,
                 distance=point.distance,
                 antenna_gain=point.horn_gain
             )
             
-            phi_vm = converter.dbm_to_dbuV_m(
+            phi_vm = converter.dbm_to_v_m(
                 dbm=point.measured_phi,
                 frequency=point.freq_hz,
                 distance=point.distance,
@@ -437,10 +442,28 @@ class CalibrationFileManager:
         # 验证通过后读取内容
         return self._read_bin_content(bin_path)
 
+    def _load_csv_file(self, csv_path: str) -> Optional[Dict]:
+        """
+        加载CSV格式校准文件
+        1. 先验证文件有效性
+        2. 再读取文件内容
+        """
+        # 先验证文件
+        if not self._validate_csv_file(csv_path):
+            self.log(f"CSV文件验证失败: {csv_path}", "ERROR")
+            return None
+        
+        # 验证通过后读取内容
+        return self._read_csv_content(csv_path)
+
     def _validate_bin_file(self, filepath: str) -> bool:
         """
         验证BIN格式校准文件结构是否有效
         不解析具体内容，只检查文件格式和完整性
+        
+        更新说明：
+        1. 每个数据点现在包含8个参数（频率 + 7个参数）
+        2. 数据点大小调整为32字节（8个float32）
         """
         try:
             with open(filepath, 'rb') as f:
@@ -465,7 +488,7 @@ class CalibrationFileManager:
                 header_size = 4 + 1 + 4 + meta_len  # 幻数+版本+长度+元数据
                 data_size = file_size - header_size
                 
-                if data_size % 36 != 0:  # 每个数据点36字节(4+32)
+                if data_size % 32 != 0:  # 每个数据点32字节(8个float32)
                     self.log("数据大小不匹配", "WARNING")
                     return False
                 
@@ -474,11 +497,15 @@ class CalibrationFileManager:
         except Exception as e:
             self.log(f"验证二进制文件失败: {str(e)}", "ERROR")
             return False
-        
+
     def _read_bin_content(self, bin_path: str) -> Optional[Dict]:
         """
         读取已验证的BIN文件内容
         假设文件已经通过验证，直接解析内容
+        
+        更新说明：
+        1. 数据点现在包含8个参数（频率 + 7个参数）
+        2. 更新数据结构以匹配新的CSV模板
         """
         try:
             with open(bin_path, 'rb') as f:
@@ -497,15 +524,19 @@ class CalibrationFileManager:
                         break
                     
                     freq = struct.unpack('f', freq_bytes)[0]
-                    data = struct.unpack('8f', f.read(32))  # 8个float32=32字节
+                    data = struct.unpack('7f', f.read(28))  # 7个float32=28字节
                     
                     data_points.append({
                         'freq': freq,
-                        'x_theta': data[0], 'x_phi': data[1],
-                        'ku_theta': data[2], 'ku_phi': data[3],
-                        'k_theta': data[4], 'k_phi': data[5],
-                        'ka_theta': data[6], 'ka_phi': data[7]
+                        'theta': data[0],
+                        'phi': data[1],
+                        'horn_gain': data[2],
+                        'theta_corrected': data[3],
+                        'phi_corrected': data[4],
+                        'theta_corrected_vm': data[5],
+                        'phi_corrected_vm': data[6]
                     })
+                
                 self.current_meta = meta
                 self.data_points = data_points
                 return {
@@ -516,24 +547,13 @@ class CalibrationFileManager:
             self.log(f"读取二进制文件内容失败: {str(e)}", "ERROR")
             return None
 
-    def _load_csv_file(self, csv_path: str) -> Optional[Dict]:
-        """
-        加载CSV格式校准文件
-        1. 先验证文件有效性
-        2. 再读取文件内容
-        """
-        # 先验证文件
-        if not self._validate_csv_file(csv_path):
-            self.log(f"CSV文件验证失败: {csv_path}", "ERROR")
-            return None
-        
-        # 验证通过后读取内容
-        return self._read_csv_content(csv_path)
-
     def _validate_csv_file(self, filepath: str) -> bool:
         """
         验证CSV格式校准文件结构是否有效
         不解析具体数据值，只检查文件结构和元数据
+        
+        改进点：
+        1. 更宽松地验证数据行格式
         """
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
@@ -546,9 +566,10 @@ class CalibrationFileManager:
                 
             # 定义必需的头字段
             REQUIRED_HEADERS = {
-                "!Created:", "!Operator:", "!  Signal_Generator:", 
-                "!  Spectrum_Analyzer:", "!  Antenna:", "!Environment:",
-                "!  Start:", "!  Stop:", "!  Step:", "!  Points:", "!Data Columns:"
+                "!Created:", "!Operator:", "!Equipment:", 
+                "!  Signal_Generator:", "!  Spectrum_Analyzer:", "!  Antenna:", 
+                "!Environment:", "!Frequency:", "!  Start:", "!  Stop:", 
+                "!  Step:", "!  Points:", "!Data Columns:"
             }
             
             # 检查所有必需字段是否存在
@@ -561,8 +582,8 @@ class CalibrationFileManager:
             
             # 检查数据部分标题行
             data_lines = [line for line in lines if not line.startswith("!") and line.strip()]
-            if not data_lines or not data_lines[0].startswith("Frequency(GHz),"):
-                self.log("缺少或无效的数据标题行", "WARNING")
+            if not data_lines:
+                self.log("缺少数据行", "WARNING")
                 return False
                 
             # 检查结束标记
@@ -580,35 +601,26 @@ class CalibrationFileManager:
             self.log(f"验证CSV文件失败: {str(e)}", "ERROR")
             return False
 
+
     def _read_csv_content(self, csv_path: str) -> Optional[Dict]:
         """
         读取已验证的CSV文件内容
         假设文件已经通过验证，直接解析内容
         
-        返回包含完整元数据和数据点的字典:
-        {
-            'meta': {
-                'file_format': str,
-                'header': list,
-                'created': str,
-                'operator': str,
-                'signal_gen': (model, sn),
-                'spec_analyzer': (model, sn),
-                'antenna': (model, sn),
-                'environment': (temp, humidity),
-                'freq_params': {
-                    'start_ghz': float,
-                    'stop_ghz': float,
-                    'step_ghz': float
-                },
-                'points': int,
-                'version_notes': str,
-                'end_of_data': str,
-                'md5': str
-            },
-            'data': list  # 数据点列表
-        }
+        改进点：
+        1. 过滤Excel可能添加的多余逗号
+        2. 更健壮的数据行解析
         """
+        def clean_line(line: str) -> str:
+            """清理数据行，移除多余逗号和空格"""
+            # 移除行首行尾空格和引号
+            line = line.strip().strip('"\'')
+            # 合并连续的逗号
+            line = re.sub(r',+', ',', line)
+            # 移除行尾的逗号
+            line = re.sub(r',$', '', line)
+            return line
+
         try:
             with open(csv_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
@@ -618,7 +630,7 @@ class CalibrationFileManager:
                 'file_format': 'csv',
                 'header': [],
                 'signal_gen': ('未知', '未知'),
-                'spec_analyzer': ('未知', '未知'),
+                'power_meter': ('未知', '未知'),
                 'antenna': ('未知', '未知'),
                 'environment': (0.0, 0.0),
                 'freq_params': {
@@ -628,9 +640,9 @@ class CalibrationFileManager:
                 }
             }
             
-            data_start = 0
-            for i, line in enumerate(lines):
-                line = line.strip()
+            # 解析头部信息
+            for line in lines:
+                line = clean_line(line).strip()
                 if not line:
                     continue
                     
@@ -652,12 +664,12 @@ class CalibrationFileManager:
                         sn = parts[1].strip() if len(parts) > 1 else '未知'
                         meta['signal_gen'] = (model, sn)
                     
-                    # 解析频谱分析仪信息
+                    # 解析功率计信息
                     elif line.startswith('!  Spectrum_Analyzer:'):
                         parts = line.split('_SN:')
                         model = parts[0].split(':', 1)[1].strip()
                         sn = parts[1].strip() if len(parts) > 1 else '未知'
-                        meta['spec_analyzer'] = (model, sn)
+                        meta['power_meter'] = (model, sn)
                     
                     # 解析天线信息
                     elif line.startswith('!  Antenna:'):
@@ -696,69 +708,69 @@ class CalibrationFileManager:
                         meta['md5'] = line.split(':', 1)[1].strip()
                 
                 else:
-                    data_start = i
-                    break
+                    break  # 遇到数据行时停止解析头部
             
-            # 跳过标题行（第一个非注释行）
-            data_lines = [line.strip() for line in lines[data_start:] if line.strip() and not line.startswith('!')]
-            if not data_lines:
-                self.log("没有有效数据行", "WARNING")
-                return None
-                
-            # 确认标题行
-            header_line = data_lines[0]
-            if not header_line.startswith("Frequency(GHz),"):
-                self.log(f"无效的数据标题行: {header_line}", "WARNING")
-                return None
-                
-            # 处理数据行（跳过标题行）
+            # 使用csv.reader读取数据部分
             data_points = []
-            for line in data_lines[1:]:
-                if not line or line.startswith('!'):
-                    continue
-                    
-                parts = line.split(',')
-                if len(parts) != 9:
-                    self.log(f"数据行格式错误，应有9列，实际{len(parts)}列: {line}", "WARNING")
-                    continue
+            with open(csv_path, 'r', encoding='utf-8') as f:
+                reader = csv.reader(f)
                 
-                try:
-                    freq = float(parts[0])
-                    # 验证频率值范围 (假设在0.1-100 GHz之间)
-                    if not (0.1 <= freq <= 100.0):
-                        self.log(f"频率值{freq}GHz超出有效范围(0.1-100GHz)", "WARNING")
+                # 跳过头部和标题行
+                for row in reader:
+                    if not row or not row[0]:
+                        continue
+                    if row[0] == "Frequency" and len(row) >= 8:
+                        break  # 找到标题行
+                
+                # 读取数据行
+                for row in reader:
+                    if not row or not row[0] or row[0].startswith('!'):
                         continue
                     
-                    # 验证补偿值范围 (假设在-100到100 dB之间)
-                    compensation_values = []
-                    for val in parts[1:9]:
-                        try:
-                            num = float(val)
-                            if not (-100 <= num <= 100):
-                                self.log(f"补偿值超出有效范围(-100-100dB): {val}", "WARNING")
-                                break
-                            compensation_values.append(num)
-                        except ValueError:
-                            self.log(f"无效数值格式: {val}", "WARNING")
-                            break
+                    # 清理行数据
+                    cleaned_row = [cell.strip() for cell in row if cell.strip()]
                     
-                    if len(compensation_values) != 8:
-                        continue  # 跳过无效行
+                    # 确保有足够的数据列
+                    if len(cleaned_row) < 8:
+                        self.log(f"数据行列数不足(需要8列，实际{len(cleaned_row)}列): {row}", "WARNING")
+                        continue
+                    
+                    try:
+                        freq = float(cleaned_row[0])
+                        # 验证频率值范围 (假设在0.1-100 GHz之间)
+                        if not (0.1 <= freq <= 100.0):
+                            self.log(f"频率值{freq}GHz超出有效范围(0.1-100GHz)", "WARNING")
+                            continue
                         
-                    data_points.append({
-                        'freq': freq,
-                        'x_theta': compensation_values[0],
-                        'x_phi': compensation_values[1],
-                        'ku_theta': compensation_values[2],
-                        'ku_phi': compensation_values[3],
-                        'k_theta': compensation_values[4],
-                        'k_phi': compensation_values[5],
-                        'ka_theta': compensation_values[6],
-                        'ka_phi': compensation_values[7]
-                    })
-                except ValueError as e:
-                    self.log(f"数据行解析失败: {line} - {str(e)}", "WARNING")
-                    continue
+                        # 验证补偿值范围 (假设在-100到100 dB之间)
+                        compensation_values = []
+                        for val in cleaned_row[1:8]:
+                            try:
+                                num = float(val)
+                                if not (-100 <= num <= 100):
+                                    self.log(f"补偿值超出有效范围(-100-100dB): {val}", "WARNING")
+                                    break
+                                compensation_values.append(num)
+                            except ValueError:
+                                self.log(f"无效数值格式: {val}", "WARNING")
+                                break
+                        
+                        if len(compensation_values) != 7:
+                            continue  # 跳过无效行
+                            
+                        data_points.append({
+                            'freq': freq,
+                            'theta': compensation_values[0],
+                            'phi': compensation_values[1],
+                            'horn_gain': compensation_values[2],
+                            'theta_corrected': compensation_values[3],
+                            'phi_corrected': compensation_values[4],
+                            'theta_corrected_vm': compensation_values[5],
+                            'phi_corrected_vm': compensation_values[6]
+                        })
+                    except ValueError as e:
+                        self.log(f"数据行解析失败: {row} - {str(e)}", "WARNING")
+                        continue
             
             # 更新实例变量
             self.current_meta = meta
@@ -882,3 +894,23 @@ class CalibrationFileManager:
         except Exception as e:
             self.log(f"获取版本历史失败: {str(e)}", "ERROR")
         return versions
+
+    def export_to_csv(self, file_path: str, data: List[CalibrationPoint]):
+        """导出校准数据到CSV文件"""
+        df = pd.DataFrame([{
+            'Frequency(GHz)': point.freq_hz / 1e9,
+            'Measured_Theta(dBm)': point.measured_theta,
+            'Measured_Phi(dBm)': point.measured_phi,
+            'Reference_Power(dBm)': point.ref_power,
+            'Horn_Gain(dBi)': point.horn_gain,
+            'Corrected_Theta(dB)': point.measured_theta - point.ref_power + point.horn_gain,
+            'Corrected_Phi(dB)': point.measured_phi - point.ref_power + point.horn_gain,
+            'Field_Strength_Theta(dBμV/m)': point.theta_corrected_vm,
+            'Field_Strength_Phi(dBμV/m)': point.phi_corrected_vm,
+            'Distance(m)': point.distance,
+            'Timestamp': point.timestamp
+        } for point in data])
+        
+        # 确保目录存在
+        Path(file_path).parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(file_path, index=False)

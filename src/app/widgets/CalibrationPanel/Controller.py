@@ -3,10 +3,12 @@ import pandas as pd
 from pathlib import Path
 from typing import List, Optional, Dict, Union
 from datetime import datetime
+from scipy.interpolate import interp1d
 
 from PyQt5.QtCore import QObject, pyqtSignal, QThread
 from PyQt5.QtWidgets import QMessageBox, QFileDialog
 from app.controllers.CalibrationFileManager import CalibrationFileManager
+from app.utils.SignalUnitConverter import SignalUnitConverter
 from app.instruments.factory import InstrumentFactory
 from app.instruments.interfaces import SignalSource, PowerSensor
 from app.threads.CalibrationThread import CalibrationService, CalibrationPoint, CalibrationThread
@@ -30,6 +32,9 @@ class CalibrationController(QObject):
         self._freq_list: List[float] = []
         self._calibration_thread = None
         self._calibration_service = CalibrationService()
+        # 初始化单位转换器
+        self._converter = SignalUnitConverter()
+        self._horn_gain_interpolator = None  # 初始化插值器为None
 
         # 初始化校准文件管理器
         self.cal_manager = CalibrationFileManager(
@@ -241,6 +246,72 @@ class CalibrationController(QObject):
 
     # endregion
 
+    # region 天线增益部分
+    def _import_antenna_gain(self):
+        """导入天线增益文件并创建插值器"""
+        try:
+            file_path, _ = QFileDialog.getOpenFileName(
+                self._view,
+                "选择天线增益文件",
+                "",
+                "CSV文件 (*.csv);;所有文件 (*)"
+            )
+            
+            if not file_path:
+                return
+                
+            # 读取增益数据
+            df = pd.read_csv(file_path)
+            df.columns = df.columns.str.lower()
+            
+            # 检查必要的列
+            if 'freq' not in df.columns or 'gain' not in df.columns:
+                raise ValueError("CSV文件必须包含'freq'和'gain'列")
+                
+            # 验证频率范围
+            min_freq = df['freq'].min()
+            max_freq = df['freq'].max()
+            if min_freq < 0.1 or max_freq > 40:
+                raise ValueError("频率范围必须在0.1-40GHz之间")
+                
+            # 创建插值器
+            freqs = df['freq'].values
+            gains = df['gain'].values
+            self._horn_gain_interpolator = interp1d(
+                freqs, gains, 
+                kind='linear', 
+                bounds_error=False,
+                fill_value=(gains[0], gains[-1])
+            )
+            
+            # 保存增益数据到模型
+            self._model.antenna_gain_data = df.to_dict('records')
+            
+            # 更新UI显示
+            freq_count = len(df)
+            self._view.antenna_gain_info.setText(
+                f"{min_freq:.1f}-{max_freq:.1f}GHz Loaded"
+            )
+            self._log(f"成功导入{freq_count}个天线增益点（{min_freq:.3f}-{max_freq:.3f}GHz）", "INFO")
+            
+        except Exception as e:
+            self._log(f"导入天线增益失败: {str(e)}", "ERROR")
+            QMessageBox.warning(self._view, "导入错误", f"导入天线增益失败:\n{str(e)}")
+            self._model.antenna_gain_data = None
+            self._horn_gain_interpolator = None
+            self._view.antenna_gain_info.setText("未导入天线增益")
+ 
+    def _get_horn_gain(self, freq_ghz: float) -> float:
+        """获取指定频率的天线增益"""
+        if self._horn_gain_interpolator is None:
+            return 0.0  # 默认无增益补偿
+            
+        try:
+            return float(self._horn_gain_interpolator(freq_ghz))
+        except:
+            return 0.0
+    # endregion
+
     # region 校准流程控制
     def _on_start(self):
         """处理开始校准按钮点击"""
@@ -303,7 +374,7 @@ class CalibrationController(QObject):
         """处理范围模式校准启动"""
         freq_list = [start + i * step for i in range(int((stop - start) / step) + 1)]
         self._execute_calibration(freq_list, ref_power)
-
+ 
     def _start_calibration_with_list_process(self, freq_list: List[float], ref_power: float):
         """处理频点列表模式校准启动"""
         self._execute_calibration(freq_list, ref_power)
@@ -321,12 +392,11 @@ class CalibrationController(QObject):
         
         # 转换为Hz单位
         freq_list_hz = [f * 1e9 for f in freq_list]
-        print("freq_list_hz",freq_list_hz)
         
         # 启动校准服务
         self._calibration_service.start_calibration(
-            signal_source=self._model.signal_gen.instance,  # 使用实际实例
-            power_meter=self._model.power_meter.instance,   # 使用实际实例
+            signal_source=self._model.signal_gen.instance,
+            power_meter=self._model.power_meter.instance,
             freq_list=freq_list_hz,
             ref_power=ref_power,
             progress_callback=self._update_progress,
@@ -334,7 +404,6 @@ class CalibrationController(QObject):
             finished_callback=self._on_calibration_finished,
             error_callback=self._on_calibration_error
         )
-
 
     def _on_stop(self):
         """处理停止校准"""
@@ -393,9 +462,58 @@ class CalibrationController(QObject):
         self._update_button_states()
 
     def _save_calibration_point(self, point: CalibrationPoint):
-        """保存单个校准点"""
-        self._model.add_calibration_point(point)
-        self.cal_manager.add_calibration_point(point)
+        """保存单个校准点，包含天线增益计算和V/M计算"""
+        try:
+            # 获取天线增益
+            freq_ghz = point.freq_hz / 1e9
+            horn_gain = self._get_horn_gain(freq_ghz)
+            
+            # 更新校准点数据
+            point.horn_gain = horn_gain
+            
+            # 使用转换器计算V/M值
+            theta_corrected = point.measured_theta - point.ref_power + horn_gain
+            phi_corrected = point.measured_phi - point.ref_power + horn_gain
+            
+            point.theta_corrected_vm = self._converter.dbm_to_v_m(
+                point.measured_theta,
+                point.freq_hz,
+                point.distance,
+                10**(horn_gain/10)  # 将dBi转换为线性值
+            )
+            
+            point.phi_corrected_vm = self._converter.dbm_to_v_m(
+                point.measured_phi,
+                point.freq_hz,
+                point.distance,
+                10**(horn_gain/10)  # 将dBi转换为线性值
+            )
+            
+            # 保存到模型和文件
+            self._model.add_calibration_point(point)
+            self.cal_manager.add_calibration_point(point)
+            
+            # 记录详细信息到日志
+            self._log(
+                f"频率: {freq_ghz:.3f}GHz | "
+                f"测量值(θ): {point.measured_theta:.2f}dBm | "
+                f"测量值(φ): {point.measured_phi:.2f}dBm | "
+                f"天线增益: {horn_gain:.2f}dBi | "
+                f"实际值(θ): {theta_corrected:.2f}dB | "
+                f"实际值(φ): {phi_corrected:.2f}dB | "
+                f"场强(θ): {point.theta_corrected_vm:.2f}dBμV/m | "
+                f"场强(φ): {point.phi_corrected_vm:.2f}dBμV/m",
+                "DEBUG"
+            )
+        except Exception as e:
+            self._log(f"计算场强值时出错: {str(e)}", "ERROR")
+            # 设置默认值以防出错
+            point.theta_corrected_vm = 0.0
+            point.phi_corrected_vm = 0.0
+            point.horn_gain = 0.0
+            self._model.add_calibration_point(point)
+            self.cal_manager.add_calibration_point(point)
+
 
     def _on_calibration_finished(self, results: List[CalibrationPoint]):
         """校准完成处理"""

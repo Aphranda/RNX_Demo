@@ -20,6 +20,8 @@ class CalibrationPoint:
     ref_power: float = 0.0           # 参考功率(dBm)
     horn_gain: float = 0.0           # 喇叭增益(dBi)
     distance: float = 1.0            # 测量距离(米)
+    theta_corrected_vm: float = 0.0
+    phi_corrected_vm: float = 0.0
     
     def __post_init__(self):
         """后初始化处理"""
@@ -116,16 +118,25 @@ class CalibrationThread(QThread):
             self.signal_source.set_output(True)
             time.sleep(self.dwell_time)
             
-            measured_power = self._measure_power(freq_hz)
+            # 测量两个极化的功率
+            measured_theta = self._measure_power(freq_hz)
+            measured_phi = self._measure_power(freq_hz)  # 实际应用中可能需要切换极化
             
             self.signal_source.set_output(False)
             
             return CalibrationPoint(
                 freq_hz=freq_hz,
                 expected_power=self.ref_power,
-                measured_power=measured_power,
-                delta=measured_power - self.ref_power,
-                timestamp=time.strftime("%Y-%m-%d %H:%M:%S")
+                measured_power=(measured_theta + measured_phi)/2,  # 保持向后兼容
+                delta=((measured_theta + measured_phi)/2) - self.ref_power,
+                timestamp=time.strftime("%Y-%m-%d %H:%M:%S"),
+                measured_theta=measured_theta,
+                measured_phi=measured_phi,
+                ref_power=self.ref_power,
+                horn_gain=0.0,  # 将在Controller中填充
+                distance=1.0,   # 默认1米距离
+                theta_corrected_vm=0.0,  # 将在Controller中计算
+                phi_corrected_vm=0.0     # 将在Controller中计算
             )
         except Exception as e:
             self.signal_source.set_output(False)
@@ -134,6 +145,7 @@ class CalibrationThread(QThread):
                 message=f"频率 {freq_hz/1e9:.3f}GHz 校准失败: {str(e)}",
                 command=f"set_frequency/set_output"
             )
+
             
     def _measure_power(self, freq_hz: float) -> float:
         """通过接口方法测量功率"""

@@ -801,3 +801,47 @@ class SignalUnitConverter:
             return 10 ** (dbuV_m / 20) * 1e-6 if dbuV_m > -math.inf else 0.0
         except (ValueError, ZeroDivisionError):
             return 0.0
+
+    def dbm_to_v_m(self, dbm: float, frequency: float, distance: float = 1.0, antenna_gain: float = 1.0) -> float:
+        """
+        将dBm转换为V/m
+        
+        参数:
+            dbm: 发射功率 (dBm)
+            frequency: 频率 (Hz)
+            distance: 距离 (米), 默认为1米
+            antenna_gain: 天线增益 (无量纲), 默认为1
+        
+        返回:
+            电场强度 (V/m)
+        
+        公式步骤:
+            1. 先将dBm转换为dBμV/m
+            2. 再将dBμV/m转换为V/m
+        """
+        # 先转换为dBμV/m
+        dbuV_m = self.dbm_to_dbuV_m(dbm, frequency, distance, antenna_gain)
+        # 再转换为V/m
+        return self.dbuV_m_to_v_m(dbuV_m)
+
+    def v_m_to_dbm(self, v_m: float, frequency: float, distance: float = 1.0, antenna_gain: float = 1.0) -> float:
+        """
+        将V/m转换为dBm
+        
+        参数:
+            v_m: 电场强度 (V/m)
+            frequency: 频率 (Hz)
+            distance: 距离 (米), 默认为1米
+            antenna_gain: 天线增益 (无量纲), 默认为1
+        
+        返回:
+            发射功率 (dBm)
+        
+        公式步骤:
+            1. 先将V/m转换为dBμV/m
+            2. 再将dBμV/m转换为dBm
+        """
+        # 先转换为dBμV/m
+        dbuV_m = self.v_m_to_dbuV_m(v_m)
+        # 再转换为dBm
+        return self.dbuV_m_to_dbm(dbuV_m, frequency, distance, antenna_gain)
