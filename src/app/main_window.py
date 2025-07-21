@@ -10,6 +10,7 @@ sys.path.insert(0, BASE_DIR)
 from resources.ui.main_window_ui import MainWindowUI
 
 from app.threads.StatusQueryThread import StatusQueryThread
+from app.core.scpi_commands import SCPICommands
 
 class MainWindow(MainWindowUI):
     def __init__(self, Communicator, SignalUnitConverter, CalibrationFileManager):
@@ -23,6 +24,10 @@ class MainWindow(MainWindowUI):
         self.comm_mutex = QMutex()
         self.status_thread = None
         self.calibration_thread = None  # 添加校准线程引用
+
+        # 初始化标准SCPI库
+        self.scpi = SCPICommands(self.tcp_client, self.comm_mutex)
+        self.scpi.command_executed.connect(self._handle_scpi_response)
 
         # 初始化状态缓存
         self._init_status_cache()
@@ -83,6 +88,13 @@ class MainWindow(MainWindowUI):
         self.show_status("系统就绪。")
         self.log("系统启动。", "INFO")
 
+    # --- 标准SCPI ---
+    def _handle_scpi_response(self, cmd: str, result: str):
+        """处理SCPI命令执行结果"""
+        if "失败" in result or "错误" in result:
+            self.log(f"{cmd} {result}", "ERROR")
+        else:
+            self.log(f"{cmd} {result}", "INFO")
 
     # --- 日志方法 ---
     def log(self, message, level="INFO"):
@@ -153,7 +165,15 @@ class MainWindow(MainWindowUI):
             self.show_status("系统初始化中...")
 
             
-            # 发送复位ALL命令
+            # 1. 复位设备并等待完成
+            if not self.scpi.reset_and_wait():
+                raise RuntimeError("设备复位失败")
+            
+            # 2. 清除状态寄存器
+            self.scpi.clear_status()
+            self.pause_status_thread()
+            self.resume_status_thread()
+            # 3. 发送机械复位命令
             val = "ALL"
             self.status_panel._controller.request_home(val)
             
@@ -889,6 +909,7 @@ class MainWindow(MainWindowUI):
         """重写关闭事件，确保安全关闭线程"""
         # 停止状态查询线程
         if self.status_thread and self.status_thread.isRunning():
+            self.pause_status_thread()
             self.status_thread.stop()
             self.status_thread.wait(2000)  # 等待2秒
         
@@ -913,79 +934,4 @@ class MainWindow(MainWindowUI):
             event.accept()
         else:
             event.ignore()
-
-
-    def _format_quantity(self, value, quantity_type, target_widget=None):
-        """Format numeric values with optimal precision for different unit types
-        - Uses scientific notation for very large/small values
-        - Maintains unit-specific formatting
-        - Handles all defined unit types (frequency, power, E-field)
-        - Special formatting for dB units
-        """
-        
-        if value == "-" or value is None:
-            return "-"
-        
-        try:
-            # Convert to float first to handle string inputs
-            num = float(str(value).strip())
-            
-            if quantity_type == "frequency":
-                current_unit = self.status_panel.freq_unit_combo.currentText()
-                converted_value, unit = self.status_panel.unit_converter.convert_frequency(
-                    num, "Hz", current_unit
-                )
-                
-                # Frequency formatting rules
-                if unit == "GHz":
-                    if abs(converted_value) >= 1000:
-                        return f"{converted_value:.6e} {unit}".replace('e+0', 'e+')
-                    return f"{converted_value:.6f} {unit}"
-                elif unit == "MHz":
-                    return f"{converted_value:.3f} {unit}"
-                elif unit == "kHz":
-                    return f"{converted_value:.1f} {unit}"
-                else:  # Hz
-                    return f"{int(converted_value)} {unit}"
-                    
-            elif quantity_type == "power":
-                if target_widget == "src_power":
-                    current_unit = self.status_panel.power_unit_combo.currentText()
-                else:
-                    current_unit = self.status_panel.raw_power_unit_combo.currentText()
-                
-                # Handle E-field units (1m distance assumed)
-                if current_unit in self.status_panel.unit_converter.E_FIELD_UNITS:
-                    converted_value, unit = self.status_panel.unit_converter.power_density_to_efield(num, "dBm")
-                    converted_value, unit = self.status_panel.unit_converter.convert_efield(converted_value, "V/m", current_unit)
-                    
-                    # E-field formatting
-                    if unit in ["dBμV/m", "dBuV/m"]:
-                        return f"{converted_value:.2f}{unit}"
-                    elif unit == "V/m":
-                        return f"{converted_value:.6f} {unit}"
-                    else:  # mV/m, µV/m
-                        return f"{converted_value:.3f} {unit}"
-                        
-                else:  # Regular power units
-                    converted_value, unit = self.status_panel.unit_converter.convert_power(num, "dBm", current_unit)
-                    
-                    # Power unit formatting
-                    if unit in ["dBm", "dBW"]:
-                        return f"{converted_value:.2f} {unit}"
-                    elif unit == "W":
-                        if abs(converted_value) >= 1000 or abs(converted_value) < 0.001:
-                            return f"{converted_value:.6e} {unit}".replace('e+0', 'e+')
-                        return f"{converted_value:.6f} {unit}"
-                    else:  # mW, µW, nW
-                        if abs(converted_value) >= 1e6 or abs(converted_value) < 0.001:
-                            return f"{converted_value:.6e}{unit}".replace('e+0', 'e+')
-                        return f"{converted_value:.3f}{unit}"
-
-        except (ValueError, TypeError):
-            return str(value)
-        
-        return str(value)
-
-
 
