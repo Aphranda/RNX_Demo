@@ -8,11 +8,29 @@ from app.instruments.interfaces import SignalSource, PowerSensor
 
 @dataclass
 class CalibrationPoint:
-    freq_hz: float
-    expected_power: float
-    measured_power: float
-    delta: float
-    timestamp: str
+    freq_hz: float                   # 频率(Hz)
+    expected_power: float            # 期望功率(dBm)
+    measured_power: float            # 测量功率(dBm)
+    delta: float                     # 差值(dB)
+    timestamp: str                   # 时间戳
+    
+    # 新增字段适配新格式
+    measured_theta: float = 0.0      # Theta极化测量值(dBm)
+    measured_phi: float = 0.0        # Phi极化测量值(dBm)
+    ref_power: float = 0.0           # 参考功率(dBm)
+    horn_gain: float = 0.0           # 喇叭增益(dBi)
+    distance: float = 1.0            # 测量距离(米)
+    
+    def __post_init__(self):
+        """后初始化处理"""
+        # 保持向后兼容
+        if not hasattr(self, 'measured_theta'):
+            self.measured_theta = self.measured_power
+        if not hasattr(self, 'measured_phi'):
+            self.measured_phi = self.measured_power
+        if not hasattr(self, 'ref_power'):
+            self.ref_power = self.expected_power
+
 
 class CalibrationThread(QThread):
     """解耦后的校准线程类"""

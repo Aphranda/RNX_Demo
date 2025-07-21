@@ -171,9 +171,13 @@ class MainWindow(MainWindowUI):
             
             # 2. 清除状态寄存器
             self.scpi.clear_status()
-            self.pause_status_thread()
-            self.resume_status_thread()
-            # 3. 发送机械复位命令
+            self.send_output_cmd()
+
+            # 3. 关闭信号源
+            cmd = f"SOURce:OUTPut OFF"
+            self.send_and_log(cmd)
+            
+            # 4. 发送机械复位命令
             val = "ALL"
             self.status_panel._controller.request_home(val)
             
@@ -534,10 +538,19 @@ class MainWindow(MainWindowUI):
             return 0.0
         
         # 找到最接近的频率点
-        closest_point = min(self.calibration_data,key=lambda x: abs(x['freq'] - freq_ghz))
+        closest_point = min(self.calibration_data, key=lambda x: abs(x['freq'] - freq_ghz))
         
-        # 这里假设使用X_Theta的补偿值，可以根据实际需求修改
-        return closest_point.get('x_theta', 0.0)
+        # 获取当前链路模式
+        current_link = self.parse_link_response(self.status_cache.get("src", {}).get("link", ""))
+        
+        # 根据链路模式选择使用Theta_corrected还是Phi_corrected
+        if "THETA" in current_link:
+            return closest_point.get('theta_corrected', 0.0)
+        elif "PHI" in current_link:
+            return closest_point.get('phi_corrected', 0.0)
+        else:
+            return 0.0  # 默认情况
+
 
     # --- 指令组合与发送 ---
     # --- 链路切换，并且移动馈源位置。

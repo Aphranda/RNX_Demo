@@ -238,6 +238,7 @@ class StatusPanelController(QObject):
         """执行操作(达位或复位)"""
         self.current_operation = operation
         self.operating_axis = axis
+        self._operation_confirm_count = 0  # 初始化计数器
         
         # 更新UI显示操作状态
         self.model.style_status['motion_label']['text'] = \
@@ -321,7 +322,6 @@ class StatusPanelController(QObject):
                 if axis in self.model.motion_status:
                     # 更新馈源状态机
                     self._update_feed_state(axis, axis_status)
-                    
                     # 检查是否有错误状态
                     error_items = {k: v for k, v in axis_status.items() if v == "ERROR"}
                     if error_items:
@@ -338,12 +338,23 @@ class StatusPanelController(QObject):
                         
                         # 检查当前操作是否完成
                         if self.current_operation and self.operating_axis == axis:
+                            # 添加状态确认计数器
+                            if not hasattr(self, '_operation_confirm_count'):
+                                self._operation_confirm_count = 0
+                                
                             if (self.current_operation == "HOMING" and "OK" in axis_status.get("home", "")):
-                                self._on_operation_complete(True)
+                                self._operation_confirm_count += 1
                             elif (self.current_operation == "FEEDING" and "OK" in axis_status.get("reach", "")):
+                                self._operation_confirm_count += 1
+                            else:
+                                self._operation_confirm_count = 0
+                                
+                            # 只有当连续2次确认操作完成才真正完成
+                            if self._operation_confirm_count >= 2:
                                 self._on_operation_complete(True)
-            
+                                self._operation_confirm_count = 0  # 重置计数器
             self.update_ui()
+
 
     def update_src_status(self, status: dict):
         """更新信号源状态"""

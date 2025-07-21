@@ -16,10 +16,10 @@ class SignalUnitConverter:
     
     # 频率单位转换系数
     FREQ_UNITS = {
+        'GHz': 1e9,
         'Hz': 1,
         'kHz': 1e3,
         'MHz': 1e6,
-        'GHz': 1e9,
     }
     
     # 功率单位转换系数

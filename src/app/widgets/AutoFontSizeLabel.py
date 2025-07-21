@@ -1,40 +1,44 @@
-
-from PyQt5.QtWidgets import QLabel,QSizePolicy
-from PyQt5.QtGui import QFont, QFontMetrics
-from PyQt5.QtCore import Qt
-
 from PyQt5.QtWidgets import QLabel, QSizePolicy
 from PyQt5.QtGui import QFont, QFontMetrics
 from PyQt5.QtCore import Qt
+
 class AutoFontSizeLabel(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._min_font_size = 6
         self._max_font_size = 20
-        self._default_font_size = 20  # 默认字体大小
+        self._default_font_size = 20
         self._content_margin = 10
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self._fixed_height = 40  # 新增：固定高度值
+        
+        # 设置大小策略：水平扩展，垂直固定
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        
+        # 设置固定高度
+        self.setFixedHeight(self._fixed_height)
+        
         self.setAlignment(Qt.AlignCenter)
         self.setProperty("class", "AutoFontSizeLabel")
         
-
         # 初始调整
         self.adjust_font_size()
- 
+
     def resizeEvent(self, event):
+        # 保持高度不变，只处理宽度变化
+        if event.oldSize().width() != event.size().width():
+            self.adjust_font_size()
         super().resizeEvent(event)
-        self.adjust_font_size()
- 
+
     def setText(self, text):
         super().setText(text)
         self.adjust_font_size()
- 
+
     def adjust_font_size(self):
         text = self.text()
         if not text or self.width() <= 10:
             return
         
-        # 计算可用宽度
+        # 计算可用宽度（考虑边距）
         available_width = self.width() - 2 * self._content_margin
         
         # 1. 首先检查默认字体大小是否适配
@@ -78,17 +82,14 @@ class AutoFontSizeLabel(QLabel):
             
             if text_width <= available_width:
                 best_size = mid  # 当前大小可用
-                low = mid + 1    # 尝试更大的字体
+                low = mid + 1   # 尝试更大的字体
             else:
                 high = mid - 1   # 尝试更小的字体
-        self.setFont(font)
-        font.setPointSize(best_size)
         
         return best_size
     
     def _apply_font_size(self, size):
         # 应用新字体
-        # 关键步骤：通过样式表叠加修改（不影响其他样式）
         self.setStyleSheet(f"""
             AutoFontSizeLabel {{
                 font-size: {size}pt;
@@ -96,4 +97,3 @@ class AutoFontSizeLabel(QLabel):
                 color: {self.palette().color(self.foregroundRole()).name()};
             }}
         """)
-

@@ -107,6 +107,8 @@ class CalibrationController(QObject):
             QMessageBox.warning(self._view, "导入错误", f"导入天线增益失败:\n{str(e)}")
             self._model.antenna_gain_data = None
             self._view.antenna_gain_info.setText("未导入天线增益")
+
+        self.cal_manager.generate_default_calibration((8,10),0.1)
     
     # endregion
 
@@ -218,6 +220,8 @@ class CalibrationController(QObject):
         except Exception as e:
             self._log(f"自动检测仪器失败: {str(e)}", "ERROR")
             QMessageBox.critical(self._view, "错误", f"自动检测仪器失败:\n{str(e)}")
+
+    
 
     def _cleanup_instruments(self):
         """清理仪器连接"""

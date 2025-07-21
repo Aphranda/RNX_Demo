@@ -7,6 +7,7 @@ import threading
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timezone
 from app.threads.CalibrationThread import CalibrationPoint
+from app.utils.SignalUnitConverter import SignalUnitConverter
 
 class CalibrationFileManager:
     """
@@ -53,7 +54,7 @@ class CalibrationFileManager:
         # 二进制文件结构：
         # 头部: 4字节幻数(0x524E5843 'RNXC') + 1字节版本(1)
         # 元数据: JSON格式的字符串(UTF-8编码)
-        # 数据: 每个数据点9个float32(频率 + 8个参数)
+        # 数据: 每个数据点7个float32(频率 + 6个参数)
         
         try:
             with open(bin_path, 'wb') as f:
@@ -70,21 +71,20 @@ class CalibrationFileManager:
                 for point in self._data_points:
                     freq = round(point['freq'], 6)  # 确保频率保留6位小数
                     data = [
-                        point['x_theta'], point['x_phi'],
-                        point['ku_theta'], point['ku_phi'],
-                        point['k_theta'], point['k_phi'],
-                        point['ka_theta'], point['ka_phi']
+                        point['theta'], point['phi'],
+                        point['horn_gain'],
+                        point['theta_corrected'], point['phi_corrected'],
+                        point['theta_corrected_vm'], point['phi_corrected_vm']
                     ]
-                    # 写入频率(1个float32)和8个参数(8个float32)
+                    # 写入频率(1个float32)和7个参数(7个float32)
                     f.write(struct.pack('f', freq))
-                    f.write(struct.pack('8f', *data))
+                    f.write(struct.pack('7f', *data))
                 
             self.log(f"已生成二进制校准文件: {os.path.basename(bin_path)}", "INFO")
             return bin_path
         except Exception as e:
             self.log(f"生成二进制文件失败: {str(e)}", "ERROR")
             return None
-
         
     def generate_default_calibration(self, freq_range: Tuple[float, float] = (8.0, 40.0), 
                                 step: float = 0.01, freq_list: Optional[List[float]] = None) -> str:
@@ -99,10 +99,11 @@ class CalibrationFileManager:
         # 默认设备元数据
         default_meta = {
             'operator': 'SYSTEM',
-            'signal_gen': ('DEFAULT_SG', 'SN00000'),
-            'spec_analyzer': ('DEFAULT_SA', 'SN00000'),
-            'antenna': ('DEFAULT_ANT', 'SN00000'),
-            'environment': (25.0, 50.0)  # 25°C, 50%RH
+            'signal_gen': ('PLASG-T8G40G', 'SN00000'),
+            'power_meter': ('NRP50S', 'SN00000'),
+            'antenna': ('RNX_ANT', 'SN00000'),
+            'environment': (25.0, 50.0),  # 25°C, 50%RH
+            'ref_power': {'X': -20.0, 'KU': -15.0, 'K': -30.0, 'KA': -20.0}
         }
         
         # 根据输入参数确定频率参数
@@ -131,7 +132,7 @@ class CalibrationFileManager:
             freq_params = {
                 'start_ghz': min(valid_freqs),
                 'stop_ghz': max(valid_freqs),
-                'step_ghz': 0.1,  # 使用0表示自定义频点
+                'step_ghz': 'FreqList',  # 标记为频点列表模式
                 'custom_freqs': valid_freqs  # 存储自定义频点
             }
             points = len(valid_freqs)
@@ -154,7 +155,7 @@ class CalibrationFileManager:
         filepath = self.create_new_calibration(
             equipment_meta=default_meta,
             freq_params=freq_params,
-            version_notes="系统生成的默认校准文件（所有参数为0）" + 
+            version_notes="系统生成的默认校准文件" + 
                         (" [自定义频点]" if freq_list is not None else "")
         )
         
@@ -163,10 +164,10 @@ class CalibrationFileManager:
             # 使用自定义频点
             for freq in valid_freqs:
                 zero_data = {
-                    'x_theta': 1.0, 'x_phi': 1.0,
-                    'ku_theta': 1.0, 'ku_phi': 1.0,
-                    'k_theta': 1.0, 'k_phi': 1.0,
-                    'ka_theta': 1.0, 'ka_phi': 1.0
+                    'theta': 0.0, 'phi': 0.0,
+                    'horn_gain': 0.0,
+                    'theta_corrected': 0.0, 'phi_corrected': 0.0,
+                    'theta_corrected_vm': 0.0, 'phi_corrected_vm': 0.0
                 }
                 self.add_data_point(freq, zero_data)
         else:
@@ -178,10 +179,10 @@ class CalibrationFileManager:
                     freq = stop_ghz
                     
                 zero_data = {
-                    'x_theta': 1.0, 'x_phi': 1.0,
-                    'ku_theta': 1.0, 'ku_phi': 1.0,
-                    'k_theta': 1.0, 'k_phi': 1.0,
-                    'ka_theta': 1.0, 'ka_phi': 1.0
+                    'theta': 0.0, 'phi': 0.0,
+                    'horn_gain': 0.0,
+                    'theta_corrected': 0.0, 'phi_corrected': 0.0,
+                    'theta_corrected_vm': 0.0, 'phi_corrected_vm': 0.0
                 }
                 self.add_data_point(round(freq, 6), zero_data)  # 保留6位小数避免浮点误差
         
@@ -189,7 +190,6 @@ class CalibrationFileManager:
         archived_path = self.finalize_calibration("系统自动生成的默认校准文件")
         
         return archived_path
-
 
     def create_new_calibration(self, 
                              equipment_meta: Dict, 
@@ -206,18 +206,17 @@ class CalibrationFileManager:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%SZ")
         
         # 计算总点数
-        if len(freq_params["custom_freqs"]) == 0:
-            points = int((freq_params['stop_ghz'] - freq_params['start_ghz']) / freq_params['step_ghz']) + 1
-        else:
+        if freq_params.get("custom_freqs"):
             points = len(freq_params["custom_freqs"])
-
-
-        
+        else:
+            points = int((freq_params['stop_ghz'] - freq_params['start_ghz']) / freq_params['step_ghz']) + 1
+ 
         # 生成文件名
+        step_str = "NONE" if freq_params.get("step_ghz") == "FreqList" else f"{freq_params['step_ghz']}"
         filename = (
             f"RNX_Cal_DualPol_"
             f"{freq_params['start_ghz']}to{freq_params['stop_ghz']}GHz_"
-            f"step{freq_params['step_ghz']}_{timestamp}.csv"
+            f"step{step_str}_{timestamp}.csv"
         )
         
         self.active_file = os.path.join(self.base_dir, filename)
@@ -240,7 +239,7 @@ class CalibrationFileManager:
         
         self.log(f"创建新校准文件: {filename}", "INFO")
         return self.active_file
-
+    
     def _generate_header(self) -> str:
         """生成标准文件头"""
         meta = self.current_meta
@@ -258,19 +257,18 @@ class CalibrationFileManager:
             "!Frequency:",
             f"!  Start: {freq['start_ghz']} GHz",
             f"!  Stop: {freq['stop_ghz']} GHz",
-            f"!  Step: {freq['step_ghz']} GHz",
+            f"!  Step: {freq.get('step_ghz', 'FreqList')} GHz",
             f"!  Points: {meta['points']}",
             "!Data Columns:",
             "!  1: Frequency(GHz)",
-            "!  2: X_Theta(dB)",
-            "!  3: X_Phi(dB)",
-            "!  4: Ku_Theta(dB)",
-            "!  5: Ku_Phi(dB)",
-            "!  6: K_Theta(dB)",
-            "!  7: K_Phi(dB)",
-            "!  8: Ka_Theta(dB)",
-            "!  9: Ka_Phi(dB)",
-            "Frequency(GHz),X_Theta,X_Phi,Ku_Theta,Ku_Phi,K_Theta,K_Phi,Ka_Theta,Ka_Phi"
+            "!  2: Theta(dB)",
+            "!  3: Phi(dB)",
+            "!  4: Horn_Gain(GHz)",
+            "!  5: Theta_corrected(dB)",
+            "!  6: Phi_corrected(dB)",
+            "!  7: Theta_corrected_V/M(dB)",
+            "!  8: Phi_corrected_V/M(dB)",
+            "Frequency,Theta,Phi,Horn_Gain,Theta_corrected,Phi_corrected,Theta_corrected_V/M,Phi_corrected_V/M"
         ]
         return '\n'.join(header_lines) + '\n'
 
@@ -299,17 +297,16 @@ class CalibrationFileManager:
             **data
         })
         
-        # 格式化数据行 - 修改这里，将:.3f改为:.6f
+        # 格式化数据行
         data_row = (
-            f"{freq_ghz:.6f},"  # 修改为保留6位小数
-            f"{data.get('x_theta', -99.99):.2f},"
-            f"{data.get('x_phi', -99.99):.2f},"
-            f"{data.get('ku_theta', -99.99):.2f},"
-            f"{data.get('ku_phi', -99.99):.2f},"
-            f"{data.get('k_theta', -99.99):.2f},"
-            f"{data.get('k_phi', -99.99):.2f},"
-            f"{data.get('ka_theta', -99.99):.2f},"
-            f"{data.get('ka_phi', -99.99):.2f}\n"
+            f"{freq_ghz:.6f},"
+            f"{data.get('theta', 0.0):.2f},"
+            f"{data.get('phi', 0.0):.2f},"
+            f"{data.get('horn_gain', 0.0):.5f},"
+            f"{data.get('theta_corrected', 0.0):.2f},"
+            f"{data.get('phi_corrected', 0.0):.2f},"
+            f"{data.get('theta_corrected_vm', 0.0):.2f},"
+            f"{data.get('phi_corrected_vm', 0.0):.2f}\n"
         )
         
         # 写入数据（线程安全）
@@ -321,29 +318,55 @@ class CalibrationFileManager:
 
     def add_calibration_point(self, point: 'CalibrationPoint') -> bool:
         """
-        添加校准点数据
+        添加校准点数据（完整实现，包含所有计算）
         
-        :param point: CalibrationPoint对象，包含频率、功率等信息
-        :return: 是否成功添加
+        计算公式说明：
+        1. theta_corrected = measured_theta - ref_power
+        2. phi_corrected = measured_phi - ref_power
+        3. V/M值使用SignalUnitConverter的dbm_to_dbuV_m方法计算
+        
+        :param point: 包含所有测量数据的CalibrationPoint对象
+        :return: 是否成功添加数据点
         """
-        # 将CalibrationPoint转换为适合add_data_point的格式
-        # 这里假设CalibrationPoint有freq_hz(Hz单位)和measured_power(dBm)属性
-        freq_ghz = point.freq_hz / 1e9  # 转换为GHz
+        try:
+            converter = SignalUnitConverter()
+            freq_ghz = point.freq_hz / 1e9
+            
+            # 计算基础校正值
+            theta_corr = point.measured_theta - point.ref_power
+            phi_corr = point.measured_phi - point.ref_power
+            
+            # 计算V/M校正值（考虑天线增益和距离）
+            theta_vm = converter.dbm_to_dbuV_m(
+                dbm=point.measured_theta,
+                frequency=point.freq_hz,
+                distance=point.distance,
+                antenna_gain=point.horn_gain
+            )
+            
+            phi_vm = converter.dbm_to_dbuV_m(
+                dbm=point.measured_phi,
+                frequency=point.freq_hz,
+                distance=point.distance,
+                antenna_gain=point.horn_gain
+            )
+            
+            # 构建数据点
+            data = {
+                'theta': round(point.measured_theta, 2),
+                'phi': round(point.measured_phi, 2),
+                'horn_gain': round(point.horn_gain, 5),
+                'theta_corrected': round(theta_corr, 2),
+                'phi_corrected': round(phi_corr, 2),
+                'theta_corrected_vm': round(theta_vm, 2),
+                'phi_corrected_vm': round(phi_vm, 2)
+            }
+            
+            return self.add_data_point(freq_ghz, data)
         
-        # 创建一个包含所有必要字段的数据字典
-        # 注意：根据你的实际需求调整这些字段
-        data = {
-            'x_theta': point.measured_power,  # 示例：使用测量功率作为X_Theta
-            'x_phi': 0.0,                    # 其他字段设为默认值
-            'ku_theta': 0.0,
-            'ku_phi': 0.0,
-            'k_theta': 0.0,
-            'k_phi': 0.0,
-            'ka_theta': 0.0,
-            'ka_phi': 0.0
-        }
-        
-        return self.add_data_point(freq_ghz, data)
+        except Exception as e:
+            self.log(f"计算校正值时出错: {str(e)}", "ERROR")
+            return False
 
     
     def finalize_calibration(self, notes: str = "") -> Tuple[str, str]:
