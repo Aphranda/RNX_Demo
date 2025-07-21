@@ -1,5 +1,6 @@
 
 from PyQt5.QtCore import Qt, QMutex
+from PyQt5.QtWidgets import QMessageBox
 import sys, os
 
 # 添加项目根目录到系统路径
@@ -9,8 +10,6 @@ sys.path.insert(0, BASE_DIR)
 from resources.ui.main_window_ui import MainWindowUI
 
 from app.threads.StatusQueryThread import StatusQueryThread
-
-
 
 class MainWindow(MainWindowUI):
     def __init__(self, Communicator, SignalUnitConverter, CalibrationFileManager):
@@ -23,6 +22,7 @@ class MainWindow(MainWindowUI):
 
         self.comm_mutex = QMutex()
         self.status_thread = None
+        self.calibration_thread = None  # 添加校准线程引用
 
         # 初始化状态缓存
         self._init_status_cache()
@@ -71,6 +71,7 @@ class MainWindow(MainWindowUI):
         self.speed_query_btn.clicked.connect(self.query_speed_cmd)
         self.status_panel.load_cal_btn.clicked.connect(self.load_calibration_file)
         self.status_panel._controller.motion_command.connect(self._send_motion_command)
+        self.status_panel._controller.operation_completed.connect(self._handle_operation_completed)
         self.power_input.textChanged.connect(self.on_power_input_changed)
         self.raw_power_input.textChanged.connect(self.on_raw_power_input_changed)
         #工具栏校准按钮
@@ -145,39 +146,56 @@ class MainWindow(MainWindowUI):
         
         # 禁用按钮防止重复点击
         self.init_btn.setEnabled(False)
-        self.init_btn.setText("初始化中...")
-        
-        # 暂停状态查询线程
-        self.pause_status_thread()
-        self.comm_mutex.lock()
-        
+        self.update_init_button_style("initializing")
+                
         try:
             self.log("开始系统初始化...", "INFO")
             self.show_status("系统初始化中...")
             
             # 发送复位ALL命令
-            self._send_motion_command("MOTion:HOME ALL")
-            
-            # 更新状态面板显示初始化状态
-            self.status_panel._controller.current_operation = "INITIALIZING"
-            self.status_panel._controller.operating_axis = "ALL"
-            
-            # 这里可以添加等待复位完成的逻辑
-            # 或者依赖状态线程来检测复位完成
-            
-            self.log("系统初始化完成", "SUCCESS")
-            self.show_status("系统初始化完成")
+            val = "ALL"
+            self.status_panel._controller.request_home(val)
             
         except Exception as e:
             self.log(f"初始化过程中出错: {str(e)}", "ERROR")
             self.show_status(f"初始化失败: {str(e)}")
-        finally:
-            self.comm_mutex.unlock()
-            # 恢复状态查询线程
-            self.resume_status_thread()
-            # 恢复按钮状态
+            self.update_init_button_style("error")
             self.init_btn.setEnabled(True)
-            self.init_btn.setText("系统初始化")
+
+    def _handle_operation_completed(self, axis, success):
+        """处理操作完成信号"""
+        if axis == "ALL" or axis == "Z":  # 假设ALL复位会映射到Z轴
+            if success:
+                self.log("系统复位完成", "SUCCESS")
+                self.show_status("系统复位完成")
+                self.update_init_button_style("initialized")
+            else:
+                self.log("系统复位失败", "ERROR")
+                self.show_status("系统复位失败")
+                self.update_init_button_style("error")
+            
+            # 恢复按钮可用状态
+            self.init_btn.setEnabled(True)
+
+
+    def update_init_button_style(self, status):
+        """更新初始化按钮样式"""
+        status_map = {
+            "initializing": "初始化中...",
+            "initialized": "初始化完成",
+            "error": "初始化失败",
+            "default": "系统初始化"
+        }
+        
+        # 设置按钮文本
+        self.init_btn.setText(status_map.get(status, status_map["default"]))
+        
+        # 设置按钮属性用于样式选择
+        self.init_btn.setProperty("status", status)
+        
+        # 强制重新加载样式
+        self.init_btn.style().unpolish(self.init_btn)
+        self.init_btn.style().polish(self.init_btn)
 
 
     def _start_status_thread(self, ip, port):
@@ -214,7 +232,6 @@ class MainWindow(MainWindowUI):
             self.eth_ip_input.setStyleSheet("")
             self.eth_port_input.setStyleSheet("")
             self.eth_connect_btn.setStyleSheet("")
-
 
     # ==== 频率联动方法 ====
     def _on_freq_link_state_changed(self, state):
@@ -867,6 +884,34 @@ class MainWindow(MainWindowUI):
             self.calibration_panel.raise_()
             self.calibration_panel.activateWindow()
 
+    def closeEvent(self, event):
+        """重写关闭事件，确保安全关闭线程"""
+        # 停止状态查询线程
+        if self.status_thread and self.status_thread.isRunning():
+            self.status_thread.stop()
+            self.status_thread.wait(2000)  # 等待2秒
+        
+        # 停止校准线程
+        if hasattr(self, 'calibration_thread') and self.calibration_thread and self.calibration_thread.isRunning():
+            self.calibration_thread.stop()
+            self.calibration_thread.wait(2000)
+        
+        # 关闭TCP连接
+        if self.tcp_client.connected:
+            self.tcp_client.close()
+        
+        # 确认关闭
+        reply = QMessageBox.question(
+            self, '确认退出',
+            "确定要退出程序吗？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            event.accept()
+        else:
+            event.ignore()
 
 
     def _format_quantity(self, value, quantity_type, target_widget=None):

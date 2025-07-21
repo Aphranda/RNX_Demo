@@ -112,9 +112,11 @@ QPushButton:pressed {
     background: #42a5f5;
 }
 
-/* 初始化按钮基础样式 */
+/* === 初始化按钮样式 === */
+
+/* 基础样式 - 未初始化状态（红色） */
 QPushButton#initButton {
-    background-color: #e74c3c;  /* 红色背景 */
+    background-color: #e74c3c;
     color: white;
     font-weight: bold;
     font-size: 24px;
@@ -122,20 +124,66 @@ QPushButton#initButton {
     border: 5px solid #c0392b;
     border-radius: 5px;
     padding: 5px;
+    qproperty-iconSize: 32px;
 }
- 
+
+/* 初始化中状态（黄色） */
+QPushButton#initButton[status="initializing"] {
+    background-color: #f39c12;
+    border-color: #e67e22;
+    qproperty-text: "初始化中...";
+}
+
+/* 初始化完成状态（绿色） */
+QPushButton#initButton[status="initialized"] {
+    background-color: #2ecc71;
+    border-color: #27ae60;
+    qproperty-text: "已初始化";
+}
+
+/* 错误状态（紫色） */
+QPushButton#initButton[status="error"] {
+    background-color: #9b59b6;
+    border-color: #8e44ad;
+    qproperty-text: "初始化失败";
+}
+
 /* 悬停状态 */
 QPushButton#initButton:hover {
     background-color: #c0392b;
 }
- 
+
+QPushButton#initButton[status="initializing"]:hover {
+    background-color: #e67e22;
+}
+
+QPushButton#initButton[status="initialized"]:hover {
+    background-color: #27ae60;
+}
+
+QPushButton#initButton[status="error"]:hover {
+    background-color: #8e44ad;
+}
+
 /* 按下状态 */
 QPushButton#initButton:pressed {
     background-color: #992d22;
     padding-top: 6px;
     padding-left: 6px;
 }
- 
+
+QPushButton#initButton[status="initializing"]:pressed {
+    background-color: #d35400;
+}
+
+QPushButton#initButton[status="initialized"]:pressed {
+    background-color: #219653;
+}
+
+QPushButton#initButton[status="error"]:pressed {
+    background-color: #7d3c98;
+}
+
 /* 禁用状态 */
 QPushButton#initButton:disabled {
     background-color: #95a5a6;

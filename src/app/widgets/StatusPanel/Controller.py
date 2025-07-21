@@ -14,6 +14,7 @@ class FeedState(Enum):
 class StatusPanelController(QObject):
     cal_file_loaded = pyqtSignal(str)
     motion_command = pyqtSignal(str)
+    operation_completed = pyqtSignal(str, bool)  # axis, succes
     
     def __init__(self, view: StatusPanelView, model: StatusPanelModel):
         super().__init__()
@@ -175,6 +176,9 @@ class StatusPanelController(QObject):
             self.log(f"{self.operating_axis}轴{self.current_operation}操作完成", "SUCCESS")
         else:
             self.log(f"{self.operating_axis}轴{self.current_operation}操作失败", "ERROR")
+
+        # 发射操作完成信号
+        self.operation_completed.emit(self.operating_axis, success)
         
         # 重置当前操作状态
         self.current_operation = None
@@ -273,7 +277,6 @@ class StatusPanelController(QObject):
     def update_operation_status(self, axis_status: dict = None):
         """更新操作状态显示"""
         if self.current_operation and self.operating_axis:
-            print("STATE1:",axis_status)
             if self.operating_axis == "ALL":
                 self.operating_axis = "Z"
             if axis_status and self.operating_axis in axis_status:
@@ -283,7 +286,6 @@ class StatusPanelController(QObject):
                     self._on_operation_complete(True)
                 else:
                     # 操作仍在进行中
-                    print("STATE2:",status)
                     self.model.style_status['motion_label']['text'] = \
                         f"{self.operating_axis}轴{'复位' if self.current_operation == 'HOMING' else '达位'}中..."
                     self.model.style_status['motion_label']['style'] = "color: #ff8f00;"
