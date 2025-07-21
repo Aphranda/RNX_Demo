@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QLabel, QComboBox, QLineEdit, QTextEdit, QGroupBox, QGridLayout,
     QSizePolicy, QToolBar, QFileDialog, QCheckBox, QAction
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt,QSize
 from PyQt5.QtGui import QRegExpValidator, QIcon
 from PyQt5.QtCore import QRegExp
 from pathlib import Path
@@ -101,6 +101,16 @@ class MainWindowUI(QMainWindow):
         self.output_query_btn = QPushButton("查询输出")
         
         # 运动控制控件
+        self.init_btn = QPushButton("系统初始化")
+        self.init_btn.setObjectName("initButton")  # 为样式设置ID
+        self.init_btn.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+    
+        # 尝试添加图标
+        icon_path = "src/resources/icons/icon_init.png"  # 准备一个初始化图标
+        if Path(icon_path).exists():
+            self.init_btn.setIcon(QIcon(icon_path))
+            self.init_btn.setIconSize(QSize(42, 42))
+
         self.home_combo = QComboBox()
         self.home_combo.addItems(["X", "KU", "K", "KA", "ALL"])
         self.home_btn = QPushButton("执行复位")
@@ -297,20 +307,24 @@ class MainWindowUI(QMainWindow):
         motion_layout.setContentsMargins(5, 10, 5, 10)
         motion_layout.setVerticalSpacing(8)
         motion_layout.setHorizontalSpacing(6)
-        
-        # 第一行 - 复位
+
+        # 第一行 - 初始化按钮
+        motion_layout.addWidget(self.init_btn, 0, 4, 2, 1)  # 跨两列
+        self.init_btn.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+
+        # 第二行 - 复位
         motion_layout.addWidget(QLabel("复位:"), 0, 0)
         motion_layout.addWidget(self.home_combo, 0, 1)
         motion_layout.addWidget(self.home_btn, 0, 2)
         motion_layout.addWidget(self.home_query_btn, 0, 3)
         
-        # 第二行 - 达位
+        # 第三行 - 达位
         motion_layout.addWidget(QLabel("达位:"), 1, 0)
         motion_layout.addWidget(self.feed_combo, 1, 1)
         motion_layout.addWidget(self.feed_btn, 1, 2)
         motion_layout.addWidget(self.feed_query_btn, 1, 3)
         
-        # 第三行 - 速度
+        # 第四行 - 速度
         motion_layout.addWidget(QLabel("速度:"), 2, 0)
         motion_layout.addWidget(self.speed_mod_combo, 2, 1)
         motion_layout.addWidget(self.speed_combo, 2, 2)

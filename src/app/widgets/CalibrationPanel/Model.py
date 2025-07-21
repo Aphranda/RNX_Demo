@@ -28,6 +28,7 @@ class CalibrationData:
     timestamp: str
     instrument_info: Dict[str, str]
     frequency_mode: str  # "range" 或 "list"
+    antenna_gain: Optional[Dict[float, float]] = None  # 新增天线增益数据
 
 class CalibrationModel:
     def __init__(self):
@@ -36,6 +37,7 @@ class CalibrationModel:
         self.power_meter: InstrumentInfo = InstrumentInfo(address="", model="", name="")
         self._freq_list: List[float] = []
         self._calibration_points: List[CalibrationPoint] = []
+        self.antenna_gain_data: Optional[List[Dict[str, float]]] = None  # 新增天线增益数据
         
     @property
     def calibration_data(self) -> Optional[CalibrationData]:

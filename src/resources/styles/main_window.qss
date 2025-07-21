@@ -96,6 +96,9 @@ QPushButton {
     font-weight: bold;
     min-height: 24px;
 }
+
+
+
 QPushButton:hover {
     background: #1565c0;
 }
@@ -108,6 +111,38 @@ QPushButton:hover {
 QPushButton:pressed {
     background: #42a5f5;
 }
+
+/* 初始化按钮基础样式 */
+QPushButton#initButton {
+    background-color: #e74c3c;  /* 红色背景 */
+    color: white;
+    font-weight: bold;
+    font-size: 24px;
+    min-height: 60px;
+    border: 5px solid #c0392b;
+    border-radius: 5px;
+    padding: 5px;
+}
+ 
+/* 悬停状态 */
+QPushButton#initButton:hover {
+    background-color: #c0392b;
+}
+ 
+/* 按下状态 */
+QPushButton#initButton:pressed {
+    background-color: #992d22;
+    padding-top: 6px;
+    padding-left: 6px;
+}
+ 
+/* 禁用状态 */
+QPushButton#initButton:disabled {
+    background-color: #95a5a6;
+    border-color: #7f8c8d;
+}
+
+
 QStatusBar {
     background: #f1f1f1;
     color: #42a5f5;

@@ -46,8 +46,14 @@ class MainWindow(MainWindowUI):
     def _init_controller(self):
         """初始化控制器逻辑"""
         # 连接信号与槽
+
+
         self.eth_connect_btn.clicked.connect(self.connect_eth)
         self.eth_disconnect_btn.clicked.connect(self.disconnect_eth)
+
+        # 系统初始化
+        self.init_btn.clicked.connect(self.system_initialize)
+
         self.freq_feed_link_check.stateChanged.connect(self._on_freq_link_state_changed)
         self.link_set_btn.clicked.connect(self.send_link_cmd)
         self.link_query_btn.clicked.connect(self.query_link_cmd)
@@ -113,7 +119,6 @@ class MainWindow(MainWindowUI):
             self.log(f"已连接到 {ip}:{port}", "SUCCESS")
             self._start_status_thread(ip, port)
             self.query_link_cmd()
-            self.freq_feed_link_check.setChecked(True)
             self._update_connection_ui(True)
         else:
             self.log(f"连接失败: {message}", "ERROR")
@@ -130,6 +135,50 @@ class MainWindow(MainWindowUI):
         else:
             self.show_status("未连接到设备。")
             self.log("未连接到设备。", "WARNING")
+
+    def system_initialize(self):
+        """执行系统初始化操作"""
+        if not self.tcp_client.connected:
+            self.log("系统未连接，无法执行初始化", "ERROR")
+            self.show_status("系统未连接")
+            return
+        
+        # 禁用按钮防止重复点击
+        self.init_btn.setEnabled(False)
+        self.init_btn.setText("初始化中...")
+        
+        # 暂停状态查询线程
+        self.pause_status_thread()
+        self.comm_mutex.lock()
+        
+        try:
+            self.log("开始系统初始化...", "INFO")
+            self.show_status("系统初始化中...")
+            
+            # 发送复位ALL命令
+            self._send_motion_command("MOTion:HOME ALL")
+            
+            # 更新状态面板显示初始化状态
+            self.status_panel._controller.current_operation = "INITIALIZING"
+            self.status_panel._controller.operating_axis = "ALL"
+            
+            # 这里可以添加等待复位完成的逻辑
+            # 或者依赖状态线程来检测复位完成
+            
+            self.log("系统初始化完成", "SUCCESS")
+            self.show_status("系统初始化完成")
+            
+        except Exception as e:
+            self.log(f"初始化过程中出错: {str(e)}", "ERROR")
+            self.show_status(f"初始化失败: {str(e)}")
+        finally:
+            self.comm_mutex.unlock()
+            # 恢复状态查询线程
+            self.resume_status_thread()
+            # 恢复按钮状态
+            self.init_btn.setEnabled(True)
+            self.init_btn.setText("系统初始化")
+
 
     def _start_status_thread(self, ip, port):
         """启动状态查询线程"""

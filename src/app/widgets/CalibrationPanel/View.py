@@ -25,7 +25,6 @@ class CalibrationView(QWidget):
         self._setup_ui_layout()
         self._setup_window_properties()
 
-
     def _setup_window_properties(self):
         """只设置窗口显示属性"""
         self.setWindowTitle("RNX 校准工具")
@@ -36,7 +35,7 @@ class CalibrationView(QWidget):
             Qt.WindowMinimizeButtonHint |
             Qt.WindowCloseButtonHint
         )
-        self.setFixedSize(700, 900)  # 增加高度以容纳新控件
+        self.setFixedSize(700, 1000)  # 增加高度以容纳新控件
         
         # 设置窗口图标
         icon_path = "src/resources/icons/icon_calibration.png"
@@ -49,11 +48,17 @@ class CalibrationView(QWidget):
         self.device_group = QGroupBox("设备状态")
         self.power_meter_status = QLabel("功率计: 未连接")
         self.signal_gen_status = QLabel("信号源: 未连接")
+        self.btn_auto_detect = QPushButton("自动\n检测")  # 移动到这里
+        self.btn_auto_detect.setFixedWidth(80)
 
+        # 天线信息部分 - 添加导入增益按钮
         self.antenna_model = QLineEdit("RNX_ANT")
         self.antenna_model.setPlaceholderText("天线型号")
         self.antenna_sn = QLineEdit("SN00000")
         self.antenna_sn.setPlaceholderText("天线序列号")
+        self.btn_import_gain = QPushButton("导入增益")
+        self.btn_import_gain.setToolTip("导入天线增益文件")
+        self.antenna_gain_info = QLabel("未导入天线增益")
         
         # 仪器连接
         self.instr_group = QGroupBox("仪器连接")
@@ -64,7 +69,6 @@ class CalibrationView(QWidget):
         self.signal_gen_address = QLineEdit("TCPIP0::192.168.1.10::inst0::INSTR")
         self.power_meter_address = QLineEdit("TCPIP0::192.168.1.11::inst0::INSTR")
         self.btn_connect = QPushButton("连接仪器")
-        self.btn_auto_detect = QPushButton("自动检测仪器")
         
         # 频率模式选择
         self.mode_group = QGroupBox("频率模式")
@@ -76,10 +80,13 @@ class CalibrationView(QWidget):
         self.mode_button_group.addButton(self.list_mode)
         
         # 校准参数
-        self.param_group = QGroupBox("校准参数")
+        self.param_group = QGroupBox("频率参数")
         self.start_freq = QDoubleSpinBox()
         self.stop_freq = QDoubleSpinBox()
         self.step_freq = QDoubleSpinBox()
+        
+        # 参考功率单独分组
+        self.ref_power_group = QGroupBox("基础参数")
         self.ref_power = QDoubleSpinBox()
         
         # 频点列表控件
@@ -117,24 +124,36 @@ class CalibrationView(QWidget):
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(12, 12, 12, 12)
         
-        # 设备状态布局
-        device_layout = QVBoxLayout()
-        device_layout.addWidget(self.power_meter_status)
-        device_layout.addWidget(self.signal_gen_status)
+        # 设备状态布局 - 改为水平布局
+        device_layout = QHBoxLayout()
+        status_layout = QVBoxLayout()
+        status_layout.addWidget(self.power_meter_status)
+        status_layout.addWidget(self.signal_gen_status)
+        device_layout.addLayout(status_layout)
+        device_layout.addWidget(self.btn_auto_detect)  # 将自动检测按钮添加到右侧
         self.device_group.setLayout(device_layout)
 
+        # 天线信息布局 - 水平布局
+        antenna_layout = QHBoxLayout()
+        antenna_form_layout = QFormLayout()
+        antenna_form_layout.addRow("天线型号:", self.antenna_model)
+        antenna_form_layout.addRow("天线序列号:", self.antenna_sn)
+        antenna_layout.addLayout(antenna_form_layout)
+        
+        # 添加导入增益按钮和状态标签
+        gain_layout = QVBoxLayout()
+        gain_layout.addWidget(self.btn_import_gain)
+        gain_layout.addWidget(self.antenna_gain_info)
+        antenna_layout.addLayout(gain_layout)
+        
         # 仪器连接布局
         instr_layout = QFormLayout()
         instr_layout.addRow("信号源型号:", self.signal_gen_name)  # 新增行
         instr_layout.addRow("信号源地址:", self.signal_gen_address)
         instr_layout.addRow("功率计型号:", self.power_meter_name)  # 新增行
         instr_layout.addRow("功率计地址:", self.power_meter_address)
-
-        # 在仪器连接布局中添加天线信息行
-        instr_layout.addRow("天线型号:", self.antenna_model)
-        instr_layout.addRow("天线序列号:", self.antenna_sn)
+        instr_layout.addRow(antenna_layout)  # 添加天线信息布局
         instr_layout.addRow(self.btn_connect)
-        instr_layout.addRow(self.btn_auto_detect)
         self.instr_group.setLayout(instr_layout)
         
         # 频率模式布局
@@ -148,8 +167,12 @@ class CalibrationView(QWidget):
         param_layout.addRow("起始频率 (GHz):", self.start_freq)
         param_layout.addRow("终止频率 (GHz):", self.stop_freq)
         param_layout.addRow("步进 (GHz):", self.step_freq)
-        param_layout.addRow("参考功率 (dBm):", self.ref_power)
         self.param_group.setLayout(param_layout)
+        
+        # 参考功率布局
+        ref_power_layout = QFormLayout()
+        ref_power_layout.addRow("参考功率 (dBm):", self.ref_power)
+        self.ref_power_group.setLayout(ref_power_layout)
         
         # 频点列表布局
         freq_list_layout = QVBoxLayout()
@@ -166,6 +189,7 @@ class CalibrationView(QWidget):
         # 主布局
         self.main_layout.addWidget(self.device_group)
         self.main_layout.addWidget(self.instr_group)
+        self.main_layout.addWidget(self.ref_power_group)  # 添加参考功率组
         self.main_layout.addWidget(self.mode_group)
         self.main_layout.addWidget(self.param_group)
         self.main_layout.addWidget(self.freq_list_group)
@@ -175,6 +199,7 @@ class CalibrationView(QWidget):
         
         # 初始状态
         self._update_mode_visibility()
+
 
     def _update_mode_visibility(self):
         """根据选择的模式显示/隐藏相关控件"""

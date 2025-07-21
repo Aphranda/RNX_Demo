@@ -50,6 +50,7 @@ class CalibrationController(QObject):
         self._view.btn_export.clicked.connect(self._on_export)
         self._view.btn_import.clicked.connect(self._import_freq_list)
         self._view.range_mode.toggled.connect(self._update_mode_ui)
+        self._view.btn_import_gain.clicked.connect(self._import_antenna_gain)
 
         # 连接校准服务信号
         self.calibration_triggered.connect(self._start_calibration_process)
@@ -63,6 +64,51 @@ class CalibrationController(QObject):
         """记录日志"""
         if self._log_callback:
             self._log_callback(message, level)
+
+    # region 天线增益部分
+    def _import_antenna_gain(self):
+        """导入天线增益文件"""
+        try:
+            file_path, _ = QFileDialog.getOpenFileName(
+                self._view,
+                "选择天线增益文件",
+                "",
+                "CSV文件 (*.csv);;所有文件 (*)"
+            )
+            
+            if not file_path:
+                return
+                
+            df = pd.read_csv(file_path)
+            df.columns = df.columns.str.lower()
+            print(df.columns)
+            # 检查必要的列
+            if 'freq' not in df.columns or 'gain' not in df.columns:
+                raise ValueError("CSV文件必须包含'freq'和'gain'列")
+                
+            # 验证频率范围
+            min_freq = df['freq'].min()
+            max_freq = df['freq'].max()
+            if min_freq < 0.1 or max_freq > 40:
+                raise ValueError("频率范围必须在0.1-40GHz之间")
+                
+            # 保存增益数据到模型
+            self._model.antenna_gain_data = df.to_dict('records')
+            
+            # 更新UI显示
+            freq_count = len(df)
+            self._view.antenna_gain_info.setText(
+                f"{min_freq:.1f}-{max_freq:.1f}GHz Load"
+            )
+            self._log(f"成功导入{freq_count}个天线增益点，（{min_freq:.3f}-{max_freq:.3f}GHz）", "INFO")
+            
+        except Exception as e:
+            self._log(f"导入天线增益失败: {str(e)}", "ERROR")
+            QMessageBox.warning(self._view, "导入错误", f"导入天线增益失败:\n{str(e)}")
+            self._model.antenna_gain_data = None
+            self._view.antenna_gain_info.setText("未导入天线增益")
+    
+    # endregion
 
     # region 仪器连接相关方法
     def _on_connect(self):
@@ -87,7 +133,7 @@ class CalibrationController(QObject):
                     connected=True,
                     instance=sig_gen  # 保存实际实例
                 )
-                self.update_instrument_status('signal_gen', True, f"{sig_gen_name} - {sig_gen.idn.split(',')[0]}")
+                self.update_instrument_status('signal_gen', True, f"{sig_gen_name} - {sig_gen.idn.split(',')[1]}")
                 self._log(f"信号源连接成功: {sig_gen.idn}", "SUCCESS")
             else:
                 raise Exception("无法识别信号源类型")
@@ -102,7 +148,7 @@ class CalibrationController(QObject):
                     connected=True,
                     instance=pwr_meter  # 保存实际实例
                 )
-                self.update_instrument_status('power_meter', True, f"{power_meter_name} - {pwr_meter.idn.split(',')[0]}")
+                self.update_instrument_status('power_meter', True, f"{power_meter_name} - {pwr_meter.idn.split(',')[1]}")
                 self._log(f"功率计连接成功: {pwr_meter.idn}", "SUCCESS")
                 self.instruments_connected.emit(sig_gen_addr, power_meter_addr)
             else:
@@ -155,11 +201,11 @@ class CalibrationController(QObject):
             # 更新UI
             if signal_gen_address:
                 self._view.signal_gen_address.setText(signal_gen_address)
-                self.update_instrument_status('signal_gen', True, "自动检测")
+                self.update_instrument_status('signal_gen', False, "检测到信号源")
                 
             if power_meter_address:
                 self._view.power_meter_address.setText(power_meter_address)
-                self.update_instrument_status('power_meter', True, "自动检测")
+                self.update_instrument_status('power_meter', False, "检测到功率计")
                 self.instruments_auto_detected.emit()
                 
             if not signal_gen_address and not power_meter_address:
@@ -432,7 +478,7 @@ class CalibrationController(QObject):
         has_freq_list = bool(self._freq_list)
         
         # 调试信息
-        self._log(f"更新按钮状态: 运行中={is_running}, 已连接={is_connected}, 有频点列表={has_freq_list}, 范围模式={self._view.range_mode.isChecked()}", "DEBUG")
+        # self._log(f"更新按钮状态: 运行中={is_running}, 已连接={is_connected}, 有频点列表={has_freq_list}, 范围模式={self._view.range_mode.isChecked()}", "DEBUG")
         
         # 更新按钮状态
         self._view.btn_connect.setEnabled(not is_running)
