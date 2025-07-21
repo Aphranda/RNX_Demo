@@ -151,6 +151,7 @@ class MainWindow(MainWindowUI):
         try:
             self.log("开始系统初始化...", "INFO")
             self.show_status("系统初始化中...")
+
             
             # 发送复位ALL命令
             val = "ALL"

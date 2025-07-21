@@ -2,8 +2,6 @@
 import pyvisa
 from typing import Optional, Dict, Tuple
 
-
-
 from app.instruments.interfaces import SignalSource
 from app.core.exceptions.instrument import InstrumentCommandError
 from app.core.exceptions.instrument import VisaCommandError
@@ -112,7 +110,6 @@ class PlasgT8G40G(SignalSource):
                 )
                 
             actual_freq = freq_hz + (self._calibration['freq_offset'] if apply_cal else 0)
-            print(f":FREQ {actual_freq:.3f}Hz")
             self._inst.write(f":FREQ {actual_freq:.3f}Hz")
         except pyvisa.VisaIOError as e:
             raise VisaCommandError(
@@ -189,7 +186,6 @@ class PlasgT8G40G(SignalSource):
     # ========== 状态查询 ==========
     def get_status(self) -> Dict:
         """获取设备状态"""
-        print(self._inst.query(":OUTP:STATE?").strip())
         return {
             'frequency': self.get_frequency(),
             'power': self.get_power(),
@@ -211,7 +207,6 @@ class PlasgT8G40G(SignalSource):
     # ========== 其他功能 ==========
     def set_output(self, state: bool):
         """设置RF输出状态"""
-        print(f":OUTP:STATE {'ON' if state else 'OFF'}")
         self._inst.write(f":OUTP:STATE {'ON' if state else 'OFF'}")
 
     def set_modulation(self, mod_type: str, state: bool):

@@ -1,16 +1,12 @@
 # app/instruments/nrp50s.py
 import pyvisa
 import time
-from .interfaces import PowerSensor
+from app.instruments.interfaces import PowerSensor
 
 class NRP50S(PowerSensor):
-
     def __init__(self, visa_address: str, timeout: int = 5000):
-        super().__init__(visa_address)
-        self.rm = pyvisa.ResourceManager()
-        self.instrument = self.rm.open_resource(visa_address)
-        self.instrument.timeout = timeout
-
+        super().__init__(visa_address)  # 调用基类初始化，已经创建self._inst
+        self._inst.timeout = timeout  # 设置超时
 
         # 添加模型和序列号属性
         self._model = "NRP50S"  # 改为实例变量
@@ -28,13 +24,13 @@ class NRP50S(PowerSensor):
 
     def set_frequency_correction(self, offset_db: float):
         """实现接口方法"""
-        self.instrument.write(f"SENS:FREQ:CORR {offset_db}")
+        self._inst.write(f"SENS:FREQ:CORR {offset_db}")
 
     def set_averaging(self, count: int):
         """实现接口方法"""
         if not 1 <= count <= 1000:
             raise ValueError("平均次数必须在1-1000之间")
-        self.instrument.write(f"SENS:AVER:COUN {count}")
+        self._inst.write(f"SENS:AVER:COUN {count}")
 
     @classmethod
     def is_nrp_device(cls, idn: str) -> bool:
@@ -47,12 +43,12 @@ class NRP50S(PowerSensor):
     def initialize_device(self):
         """Initialize device: clear errors, reset, set units and continuous mode"""
         try:
-            self.instrument.write("*CLS")
-            self.instrument.write("*RST")
-            self.instrument.write("UNIT:POW DBM")   # Set units to dBm
-            self.instrument.write("INIT:CONT ON")   # Continuous measurement mode
-            self.instrument.write("SENS:AVER:AUTO ON")  # Enable auto-averaging
-            self.instrument.write("INIT")
+            self._inst.write("*CLS")
+            self._inst.write("*RST")
+            self._inst.write("UNIT:POW DBM")   # Set units to dBm
+            self._inst.write("INIT:CONT ON")   # Continuous measurement mode
+            self._inst.write("SENS:AVER:AUTO ON")  # Enable auto-averaging
+            self._inst.write("INIT")
             time.sleep(0.5)
         except Exception as e:
             self.log_error(f"Initialization failed: {str(e)}")
@@ -71,10 +67,10 @@ class NRP50S(PowerSensor):
             # Set frequency if provided
             if freq_ghz is not None:
                 # Convert GHz to Hz (instrument expects Hz)
-                self.instrument.write(f"SENS:FREQ {freq_ghz * 1e9}")
+                self._inst.write(f"SENS:FREQ {freq_ghz * 1e9}")
             
             # Fetch power measurement
-            value = self.instrument.query("FETC?").strip()
+            value = self._inst.query("FETC?").strip()
             return float(value)
         except Exception as e:
             self.log_error(f"Power measurement failed: {str(e)}")
@@ -83,7 +79,7 @@ class NRP50S(PowerSensor):
     def reset(self):
         """Reset instrument to default state"""
         try:
-            self.instrument.write("*RST")
+            self._inst.write("*RST")
             self.initialize_device()
         except Exception as e:
             self.log_error(f"Reset failed: {str(e)}")
@@ -91,10 +87,8 @@ class NRP50S(PowerSensor):
     def close(self):
         """Close instrument connection"""
         try:
-            if self.instrument:
-                self.instrument.close()
-            if self.rm:
-                self.rm.close()
+            if hasattr(self, '_inst') and self._inst:
+                self._inst.close()
         except Exception as e:
             self.log_error(f"Close connection failed: {str(e)}")
     
@@ -115,6 +109,7 @@ class NRP50S(PowerSensor):
     def serial_number(self) -> str:
         """设备序列号（只读）"""
         return self._serial_number
+
 
 
 # Test function when run directly

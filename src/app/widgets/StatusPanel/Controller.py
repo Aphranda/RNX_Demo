@@ -93,6 +93,7 @@ class StatusPanelController(QObject):
         # 校准文件加载
         self.view.load_cal_btn.clicked.connect(self.on_load_cal_file)
 
+
     def initialize_units(self):
         # 初始化单位下拉框
         self.view.freq_unit_combo.addItems(list(self.model.unit_converter.FREQ_UNITS.keys()))
@@ -107,8 +108,99 @@ class StatusPanelController(QObject):
         self.view.power_unit_combo.setCurrentText(self.model.units['power'])
 
     def on_unit_changed(self, unit_type: str, unit: str):
+        """处理单位变化事件"""
         self.model.update_unit(unit_type, unit)
+        
+        # 根据单位类型更新对应的显示值
+        if unit_type == 'freq':
+            current_freq = self.model.src_status.get('freq', '-')
+            if current_freq != '-':
+                formatted = self._format_quantity(current_freq, 'frequency')
+                self.model.update_src_status({'freq': formatted})
+                
+        elif unit_type in ('power', 'raw_power'):
+            current_power = self.model.src_status.get(unit_type, '-')
+            if current_power != '-':
+                formatted = self._format_quantity(current_power, 'power', 
+                                            'src_power' if unit_type == 'power' else 'raw_power')
+                self.model.update_src_status({unit_type: formatted})
+        
         self.update_ui()
+
+
+
+    def _format_quantity(self, value, quantity_type, target_widget=None):
+        """格式化数值显示，考虑单位转换"""
+        try:
+            # 转换为浮点数
+            num = float(str(value).strip())
+            
+            if quantity_type == 'frequency':
+                # 频率单位转换
+                current_unit = self.view.freq_unit_combo.currentText()
+                converted, _ = self.model.unit_converter.convert_frequency(num, 'Hz', current_unit)
+                
+                # 根据单位确定小数位数
+                if current_unit == 'Hz':
+                    return f"{int(converted)} {current_unit}"  # Hz不保留小数
+                elif current_unit == 'kHz':
+                    return f"{converted:.3f} {current_unit}"  # kHz保留3位小数
+                elif current_unit == 'MHz':
+                    return f"{converted:.6f} {current_unit}"  # MHz保留6位小数
+                elif current_unit == 'GHz':
+                    return f"{converted:.9f} {current_unit}"  # GHz保留9位小数
+                else:
+                    return f"{converted:.6f} {current_unit}"  # 默认保留6位小数
+                    
+            elif quantity_type == 'power':
+                # 获取当前单位
+                if target_widget == 'src_power':
+                    current_unit = self.view.power_unit_combo.currentText()
+                else:
+                    current_unit = self.view.raw_power_unit_combo.currentText()
+                
+                # 检查是否是电场强度单位
+                if current_unit in self.model.unit_converter.E_FIELD_UNITS:
+                    # 将dBm转换为电场强度
+                    # 需要频率信息，从当前状态获取
+                    freq_str = self.model.src_status.get('freq', '1GHz')  # 默认1GHz
+                    try:
+                        freq_ghz = float(freq_str.replace('GHz', '').strip())
+                        freq_hz = freq_ghz * 1e9
+                    except:
+                        freq_hz = 1e9  # 默认1GHz
+                    
+                    # 转换为电场强度
+                    efield_value = self.model.unit_converter.dbm_to_dbuV_m(num, freq_hz)
+                    # 转换为目标单位
+                    converted, unit = self.model.unit_converter.convert_efield(
+                        efield_value, 'dBμV/m', current_unit
+                    )
+                    
+                    # 电场强度格式化
+                    if unit in ['dBμV/m', 'dBuV/m']:
+                        return f"{converted:.2f} {unit}"
+                    elif unit == 'V/m':
+                        return f"{converted:.6f} {unit}"
+                    else:  # mV/m, µV/m
+                        return f"{converted:.3f} {unit}"
+                else:
+                    # 普通功率单位转换
+                    converted, unit = self.model.unit_converter.convert_power(num, 'dBm', current_unit)
+                    
+                    # 功率单位格式化
+                    if unit in ['dBm', 'dBW']:
+                        return f"{converted:.2f} {unit}"
+                    elif unit == 'W':
+                        return f"{converted:.6f} {unit}"
+                    else:  # mW, µW, nW
+                        return f"{converted:.3f} {unit}"
+                    
+        except (ValueError, TypeError):
+            return str(value)
+
+
+
 
     def on_load_cal_file(self):
         cal_file = self.view.cal_file_input.text()
@@ -270,9 +362,19 @@ class StatusPanelController(QObject):
                 if status.get('power') == "ERROR":
                     self.model.src_status['raw_power'] = "ERROR"
             else:
-                # 没有错误则正常更新
-                self.model.update_src_status(status)
+                # 格式化数值并更新
+                formatted_status = {}
+                for key, value in status.items():
+                    if key == 'freq':
+                        formatted_status[key] = self._format_quantity(value, 'frequency')
+                    elif key in ('power', 'raw_power'):
+                        formatted_status[key] = self._format_quantity(value, 'power', 
+                                                'src_power' if key == 'power' else 'raw_power')
+                    else:
+                        formatted_status[key] = value
+                self.model.update_src_status(formatted_status)
             self.update_ui()
+
 
     def update_operation_status(self, axis_status: dict = None):
         """更新操作状态显示"""
@@ -348,14 +450,20 @@ class StatusPanelController(QObject):
         """更新单位组合框颜色"""
         # 功率单位组合框
         power_unit = self.view.power_unit_combo.currentText()
-        power_color = self.model.unit_converter.get_power_unit_color(power_unit)
+        if power_unit in self.model.unit_converter.E_FIELD_UNITS:
+            power_color = self.model.unit_converter.get_efield_unit_color(power_unit)
+        else:
+            power_color = self.model.unit_converter.get_power_unit_color(power_unit)
         self.view.power_unit_combo.setStyleSheet(
             f"background: {power_color}; color: white;"
         )
         
         # 原始功率单位组合框
         raw_power_unit = self.view.raw_power_unit_combo.currentText()
-        raw_power_color = self.model.unit_converter.get_power_unit_color(raw_power_unit)
+        if raw_power_unit in self.model.unit_converter.E_FIELD_UNITS:
+            raw_power_color = self.model.unit_converter.get_efield_unit_color(raw_power_unit)
+        else:
+            raw_power_color = self.model.unit_converter.get_power_unit_color(raw_power_unit)
         self.view.raw_power_unit_combo.setStyleSheet(
             f"background: {raw_power_color}; color: white;"
         )
@@ -365,6 +473,7 @@ class StatusPanelController(QObject):
         self.view.freq_unit_combo.setStyleSheet(
             f"background: {freq_color}; color: white;"
         )
+
 
     def set_cal_file_style(self, text: str, state: str):
         """设置校准文件状态样式"""

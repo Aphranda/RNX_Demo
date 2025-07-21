@@ -1,22 +1,29 @@
 # app/instruments/factory.py
 import pyvisa
-from typing import Dict, Type
-
-# ... 其他导入 ...
+from typing import Dict, Optional
 from .interfaces import SignalSource, PowerSensor
 from .plasg_signal_source import PlasgT8G40G
 from .nrp50s import NRP50S
 
-# app/instruments/factory.py
 class InstrumentFactory:
+    _rm = None  # 类变量共享ResourceManager
+
     @classmethod
-    def _identify_instrument(cls, visa_address: str) -> Dict:
+    def _get_resource_manager(cls):
+        """获取共享的ResourceManager实例"""
+        if cls._rm is None:
+            cls._rm = pyvisa.ResourceManager()
+        return cls._rm
+
+    @classmethod
+    def _identify_instrument(cls, visa_address: str) -> Optional[Dict]:
         """识别仪器类型并返回详细信息"""
+        rm = cls._get_resource_manager()
+        inst = None
         try:
-            rm = pyvisa.ResourceManager()
             inst = rm.open_resource(visa_address)
+            inst.timeout = 1000  # 设置较短的超时用于识别
             idn = inst.query("*IDN?").strip().upper()
-            inst.close()
             
             # R&S NRP功率计的标准IDN格式示例：
             # "ROHDE&SCHWARZ,NRP50S,101636,02.40.22081101"
@@ -33,11 +40,15 @@ class InstrumentFactory:
                     'idn': idn
                 }
             return None
-        except Exception:
+        except Exception as e:
+            print(f"仪器识别失败: {str(e)}")
             return None
+        finally:
+            if inst is not None:
+                inst.close()
 
     @classmethod
-    def create_signal_source(cls, visa_address: str, instrument_name: str = None) -> SignalSource:
+    def create_signal_source(cls, visa_address: str, instrument_name: str = None) -> Optional[SignalSource]:
         """创建信号源实例"""
         info = cls._identify_instrument(visa_address)
         if not info or info['type'] != 'signal_source':
@@ -51,7 +62,7 @@ class InstrumentFactory:
         return None
 
     @classmethod
-    def create_power_meter(cls, visa_address: str, instrument_name: str = None) -> PowerSensor:
+    def create_power_meter(cls, visa_address: str, instrument_name: str = None) -> Optional[PowerSensor]:
         """创建功率计实例"""
         info = cls._identify_instrument(visa_address)
         if not info or info['type'] != 'power_meter':
@@ -64,3 +75,9 @@ class InstrumentFactory:
             return NRP50S(visa_address)
         return None
 
+    @classmethod
+    def cleanup(cls):
+        """清理资源管理器"""
+        if cls._rm is not None:
+            cls._rm.close()
+            cls._rm = None
