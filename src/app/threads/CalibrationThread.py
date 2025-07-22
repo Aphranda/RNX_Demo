@@ -64,32 +64,32 @@ class CalibrationThread(QThread):
         self._results = []
         total_points = len(self.freq_list)
         print(self.freq_list, total_points)
-        # try:
-        self._initialize_instruments()
-        
-        for idx, freq in enumerate(self.freq_list):
-            if not self._is_running:
-                break
-                
-            progress = int((idx + 1) / total_points * 100)
-            self.progress_updated.emit(progress, f"正在校准 {freq/1e9:.3f}GHz...")
+        try:
+            self._initialize_instruments()
             
-            point = self._calibrate_single_point(freq)
-            self._results.append(point)
-            self.point_completed.emit(point)
-            
-        if self._is_running:
-            self.progress_updated.emit(100, "校准完成")
-            self.calibration_finished.emit(self._results)
-        else:
-            self.progress_updated.emit(0, "校准已中止")
+            for idx, freq in enumerate(self.freq_list):
+                if not self._is_running:
+                    break
+                    
+                progress = int((idx + 1) / total_points * 100)
+                self.progress_updated.emit(progress, f"正在校准 {freq/1e9:.3f}GHz...")
                 
-        # except Exception as e:
-        #     self.error_occurred.emit(f"校准失败: {str(e)}")
-        #     self.progress_updated.emit(0, f"错误: {str(e)}")
-        # finally:
-        #     self._cleanup_instruments()
-        #     self._is_running = False
+                point = self._calibrate_single_point(freq)
+                self._results.append(point)
+                self.point_completed.emit(point)
+                
+            if self._is_running:
+                self.progress_updated.emit(100, "校准完成")
+                self.calibration_finished.emit(self._results)
+            else:
+                self.progress_updated.emit(0, "校准已中止")
+                    
+        except Exception as e:
+            self.error_occurred.emit(f"校准失败: {str(e)}")
+            self.progress_updated.emit(0, f"错误: {str(e)}")
+        finally:
+            self._cleanup_instruments()
+            self._is_running = False
             
     def stop(self):
         """安全停止校准"""

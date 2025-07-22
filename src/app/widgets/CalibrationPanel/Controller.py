@@ -70,53 +70,8 @@ class CalibrationController(QObject):
         if self._log_callback:
             self._log_callback(message, level)
 
-    # region 天线增益部分
-    def _import_antenna_gain(self):
-        """导入天线增益文件"""
-        try:
-            file_path, _ = QFileDialog.getOpenFileName(
-                self._view,
-                "选择天线增益文件",
-                "",
-                "CSV文件 (*.csv);;所有文件 (*)"
-            )
-            
-            if not file_path:
-                return
-                
-            df = pd.read_csv(file_path)
-            df.columns = df.columns.str.lower()
-            print(df.columns)
-            # 检查必要的列
-            if 'freq' not in df.columns or 'gain' not in df.columns:
-                raise ValueError("CSV文件必须包含'freq'和'gain'列")
-                
-            # 验证频率范围
-            min_freq = df['freq'].min()
-            max_freq = df['freq'].max()
-            if min_freq < 0.1 or max_freq > 40:
-                raise ValueError("频率范围必须在0.1-40GHz之间")
-                
-            # 保存增益数据到模型
-            self._model.antenna_gain_data = df.to_dict('records')
-            
-            # 更新UI显示
-            freq_count = len(df)
-            self._view.antenna_gain_info.setText(
-                f"{min_freq:.1f}-{max_freq:.1f}GHz Load"
-            )
-            self._log(f"成功导入{freq_count}个天线增益点，（{min_freq:.3f}-{max_freq:.3f}GHz）", "INFO")
-            
-        except Exception as e:
-            self._log(f"导入天线增益失败: {str(e)}", "ERROR")
-            QMessageBox.warning(self._view, "导入错误", f"导入天线增益失败:\n{str(e)}")
-            self._model.antenna_gain_data = None
-            self._view.antenna_gain_info.setText("未导入天线增益")
-
-        self.cal_manager.generate_default_calibration((8,10),0.1)
+  
     
-    # endregion
-
     # region 仪器连接相关方法
     def _on_connect(self):
         """处理仪器连接"""
@@ -167,7 +122,6 @@ class CalibrationController(QObject):
             self._cleanup_instruments()
             self.update_instrument_status('signal_gen', False)
             self.update_instrument_status('power_meter', False)
-
 
     def _auto_detect_instruments(self):
         """自动检测连接的VISA仪器"""
@@ -225,8 +179,6 @@ class CalibrationController(QObject):
         except Exception as e:
             self._log(f"自动检测仪器失败: {str(e)}", "ERROR")
             QMessageBox.critical(self._view, "错误", f"自动检测仪器失败:\n{str(e)}")
-
-    
 
     def _cleanup_instruments(self):
         """清理仪器连接"""
@@ -501,8 +453,8 @@ class CalibrationController(QObject):
                 f"天线增益: {horn_gain:.2f}dBi | "
                 f"实际值(θ): {theta_corrected:.2f}dB | "
                 f"实际值(φ): {phi_corrected:.2f}dB | "
-                f"场强(θ): {point.theta_corrected_vm:.2f}dBμV/m | "
-                f"场强(φ): {point.phi_corrected_vm:.2f}dBμV/m",
+                f"场强(θ): {point.theta_corrected_vm:.2f}V/m | "
+                f"场强(φ): {point.phi_corrected_vm:.2f}V/m",
                 "DEBUG"
             )
         except Exception as e:
@@ -514,9 +466,9 @@ class CalibrationController(QObject):
             self._model.add_calibration_point(point)
             self.cal_manager.add_calibration_point(point)
 
-
     def _on_calibration_finished(self, results: List[CalibrationPoint]):
         """校准完成处理"""
+        self.cal_manager.finalize_calibration("The calibration file for actual calibrated output")
         self._update_progress(100, "校准完成")
         QMessageBox.information(self._view, "完成", f"校准成功完成!\n共校准{len(results)}个频点")
         
@@ -618,8 +570,4 @@ class CalibrationController(QObject):
         self._view.btn_import.setEnabled(not is_running)
 
     # endregion
-
-    def get_current_freq_list(self) -> Optional[List[float]]:
-        """获取当前频点列表"""
-        return self._freq_list if self._freq_list else None
 
