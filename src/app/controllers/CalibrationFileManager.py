@@ -221,6 +221,7 @@ class CalibrationFileManager:
         step_str = "NONE" if freq_params.get("step_ghz") == "FreqList" else f"{freq_params['step_ghz']}"
         filename = (
             f"RNX_Cal_DualPol_"
+            f"{version_notes}_"
             f"{freq_params['start_ghz']}to{freq_params['stop_ghz']}GHz_"
             f"step{step_str}_{timestamp}.csv"
         )
@@ -327,8 +328,8 @@ class CalibrationFileManager:
         添加校准点数据（完整实现，包含所有计算）
         
         计算公式说明：
-        1. theta_corrected = measured_theta - ref_power
-        2. phi_corrected = measured_phi - ref_power
+        1. theta_corrected = measured_theta - horn_gain
+        2. phi_corrected = measured_phi - horn_gain
         3. V/M值使用SignalUnitConverter的dbm_to_dbuV_m方法计算
         
         :param point: 包含所有测量数据的CalibrationPoint对象
@@ -339,22 +340,20 @@ class CalibrationFileManager:
             freq_ghz = point.freq_hz / 1e9
             
             # 计算基础校正值
-            theta_corr = point.measured_theta - point.ref_power
-            phi_corr = point.measured_phi - point.ref_power
+            point.theta_corrected = point.measured_theta - point.horn_gain
+            point.phi_corrected = point.measured_phi - point.horn_gain
             
             # 计算V/M校正值（考虑天线增益和距离）
             theta_vm = converter.dbm_to_v_m(
-                dbm=point.measured_theta,
+                dbm=point.theta_corrected,
                 frequency=point.freq_hz,
-                distance=point.distance,
-                antenna_gain=point.horn_gain
+                distance=point.distance
             )
             
             phi_vm = converter.dbm_to_v_m(
-                dbm=point.measured_phi,
+                dbm=point.phi_corrected,
                 frequency=point.freq_hz,
-                distance=point.distance,
-                antenna_gain=point.horn_gain
+                distance=point.distance
             )
             
             # 构建数据点
@@ -362,8 +361,8 @@ class CalibrationFileManager:
                 'theta': round(point.measured_theta, 2),
                 'phi': round(point.measured_phi, 2),
                 'horn_gain': round(point.horn_gain, 5),
-                'theta_corrected': round(theta_corr, 2),
-                'phi_corrected': round(phi_corr, 2),
+                'theta_corrected': round(point.theta_corrected, 2),
+                'phi_corrected': round(point.phi_corrected, 2),
                 'theta_corrected_vm': round(theta_vm, 2),
                 'phi_corrected_vm': round(phi_vm, 2)
             }

@@ -20,6 +20,8 @@ class CalibrationPoint:
     ref_power: float = 0.0           # 参考功率(dBm)
     horn_gain: float = 0.0           # 喇叭增益(dBi)
     distance: float = 1.0            # 测量距离(米)
+    theta_corrected: float = 0.0
+    phi_corrected: float = 0.0
     theta_corrected_vm: float = 0.0
     phi_corrected_vm: float = 0.0
     
@@ -135,6 +137,8 @@ class CalibrationThread(QThread):
                 ref_power=self.ref_power,
                 horn_gain=0.0,  # 将在Controller中填充
                 distance=1.0,   # 默认1米距离
+                theta_corrected = 0.0,
+                phi_corrected= 0.0,
                 theta_corrected_vm=0.0,  # 将在Controller中计算
                 phi_corrected_vm=0.0     # 将在Controller中计算
             )

@@ -845,3 +845,13 @@ class SignalUnitConverter:
         dbuV_m = self.v_m_to_dbuV_m(v_m)
         # 再转换为dBm
         return self.dbuV_m_to_dbm(dbuV_m, frequency, distance, antenna_gain)
+
+
+if __name__ == '__main__':
+    converter = SignalUnitConverter()
+    data1 = converter.dbm_to_dbuV_m(-17.57,18.04*1e9,1,1)
+    print(data1)
+    data2 = converter.dbuV_m_to_v_m(data1)
+    print(data2)
+    data3 = converter.dbm_to_v_m(-17.57,18.04*1e9,1,1)
+    print(data3)

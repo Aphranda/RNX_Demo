@@ -292,7 +292,7 @@ class CalibrationController(QObject):
             self.cal_manager.create_new_calibration(
                 equipment_meta=equipment_meta,
                 freq_params=freq_params,
-                version_notes=f"参考功率: {ref_power}dBm"
+                version_notes=f"REF_POWER{ref_power}dBm"
             )
             
             # 触发校准信号
@@ -308,7 +308,7 @@ class CalibrationController(QObject):
             freq_params = {
                 'start_ghz': min(self._freq_list),
                 'stop_ghz': max(self._freq_list),
-                'step_ghz': "NONE",
+                'step_ghz': "FREQLIST",
                 'custom_freqs': self._freq_list,
             }
             
@@ -316,7 +316,7 @@ class CalibrationController(QObject):
             self.cal_manager.create_new_calibration(
                 equipment_meta=equipment_meta,
                 freq_params=freq_params,
-                version_notes=f"参考功率: {ref_power}dBm (频点列表模式)"
+                version_notes=f"REF_POWER{ref_power}dBm"
             )
             
             # 触发校准信号
@@ -424,21 +424,19 @@ class CalibrationController(QObject):
             point.horn_gain = horn_gain
             
             # 使用转换器计算V/M值
-            theta_corrected = point.measured_theta - point.ref_power + horn_gain
-            phi_corrected = point.measured_phi - point.ref_power + horn_gain
+            point.theta_corrected = point.measured_theta - horn_gain
+            point.phi_corrected = point.measured_phi - horn_gain
             
             point.theta_corrected_vm = self._converter.dbm_to_v_m(
-                point.measured_theta,
+                point.theta_corrected,
                 point.freq_hz,
-                point.distance,
-                10**(horn_gain/10)  # 将dBi转换为线性值
+                point.distance
             )
             
             point.phi_corrected_vm = self._converter.dbm_to_v_m(
-                point.measured_phi,
+                point.phi_corrected,
                 point.freq_hz,
-                point.distance,
-                10**(horn_gain/10)  # 将dBi转换为线性值
+                point.distance
             )
             
             # 保存到模型和文件
@@ -451,8 +449,8 @@ class CalibrationController(QObject):
                 f"测量值(θ): {point.measured_theta:.2f}dBm | "
                 f"测量值(φ): {point.measured_phi:.2f}dBm | "
                 f"天线增益: {horn_gain:.2f}dBi | "
-                f"实际值(θ): {theta_corrected:.2f}dB | "
-                f"实际值(φ): {phi_corrected:.2f}dB | "
+                f"实际值(θ): {point.theta_corrected:.2f}dB | "
+                f"实际值(φ): {point.phi_corrected:.2f}dB | "
                 f"场强(θ): {point.theta_corrected_vm:.2f}V/m | "
                 f"场强(φ): {point.phi_corrected_vm:.2f}V/m",
                 "DEBUG"

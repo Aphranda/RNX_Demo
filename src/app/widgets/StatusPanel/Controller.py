@@ -246,8 +246,8 @@ class StatusPanelController(QObject):
         self.model.style_status['motion_label']['style'] = "color: #ff8f00;"
         self.update_ui()
         
-        # 启动超时定时器(30秒)
-        self.operation_timeout.start(50000)
+        # 启动超时定时器(90秒)
+        self.operation_timeout.start(90000)
         
         # 发送实际的硬件命令
         cmd = f"MOTion:{'HOME' if operation == 'HOMING' else 'FEED'} {axis}"
