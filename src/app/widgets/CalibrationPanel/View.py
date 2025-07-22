@@ -85,9 +85,15 @@ class CalibrationView(QWidget):
         self.stop_freq = QDoubleSpinBox()
         self.step_freq = QDoubleSpinBox()
         
-        # 参考功率单独分组
-        self.ref_power_group = QGroupBox("基础参数")
+        # 参考功率和极化选择合并到一个组
+        self.basic_param_group = QGroupBox("基础参数")
         self.ref_power = QDoubleSpinBox()
+        
+        # 极化选择
+        self.theta_radio = QRadioButton("THETA")
+        self.phi_radio = QRadioButton("PHI")
+        self.dual_radio = QRadioButton("DUAL-T/P")
+        self.dual_radio.setChecked(True)
         
         # 频点列表控件
         self.freq_list_group = QGroupBox("频点列表")
@@ -169,10 +175,18 @@ class CalibrationView(QWidget):
         param_layout.addRow("步进 (GHz):", self.step_freq)
         self.param_group.setLayout(param_layout)
         
-        # 参考功率布局
-        ref_power_layout = QFormLayout()
-        ref_power_layout.addRow("参考功率 (dBm):", self.ref_power)
-        self.ref_power_group.setLayout(ref_power_layout)
+        # 基础参数布局 (包含参考功率和极化选择)
+        basic_param_layout = QFormLayout()
+        basic_param_layout.addRow("参考功率 (dBm):", self.ref_power)
+        
+        # 极化选择布局
+        polarization_layout = QHBoxLayout()
+        polarization_layout.addWidget(self.theta_radio)
+        polarization_layout.addWidget(self.phi_radio)
+        polarization_layout.addWidget(self.dual_radio)
+        basic_param_layout.addRow("极化选择:", polarization_layout)
+        
+        self.basic_param_group.setLayout(basic_param_layout)
         
         # 频点列表布局
         freq_list_layout = QVBoxLayout()
@@ -189,7 +203,7 @@ class CalibrationView(QWidget):
         # 主布局
         self.main_layout.addWidget(self.device_group)
         self.main_layout.addWidget(self.instr_group)
-        self.main_layout.addWidget(self.ref_power_group)  # 添加参考功率组
+        self.main_layout.addWidget(self.basic_param_group)  # 添加合并后的基础参数组
         self.main_layout.addWidget(self.mode_group)
         self.main_layout.addWidget(self.param_group)
         self.main_layout.addWidget(self.freq_list_group)
@@ -199,7 +213,6 @@ class CalibrationView(QWidget):
         
         # 初始状态
         self._update_mode_visibility()
-
 
     def _update_mode_visibility(self):
         """根据选择的模式显示/隐藏相关控件"""

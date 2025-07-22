@@ -217,6 +217,102 @@ QComboBox:disabled {
 QLabel:disabled {
     color: #a0a0a0;
 }
+
+/* ===== QRadioButton 样式 ===== */
+QRadioButton {
+    spacing: 12px;
+    font-size: 24px;
+    font-weight: bold;
+    color: #222;
+    min-height: 30px;
+}
+
+QRadioButton::indicator {
+    width: 24px;
+    height: 24px;
+    border: 2px solid #b0b0b0;
+    border-radius: 12px;  /* 圆形 */
+    background: #f9f9f9;
+}
+
+QRadioButton::indicator:checked {
+    border: 2px solid #1976d2;
+    background: #f9f9f9;
+}
+
+QRadioButton::indicator:checked:!hover {
+    background: qradialgradient(
+        cx:0.5, cy:0.5,
+        fx:0.5, fy:0.5,
+        radius:0.5,
+        stop:0.4 #1976d2,
+        stop:0.5 transparent
+    );
+}
+
+QRadioButton::indicator:hover {
+    border: 2px solid #64b5f6;
+}
+
+QRadioButton::indicator:checked:hover {
+    border: 2px solid #1565c0;
+    background: qradialgradient(
+        cx:0.5, cy:0.5,
+        fx:0.5, fy:0.5,
+        radius:0.5,
+        stop:0.4 #1565c0,
+        stop:0.5 transparent
+    );
+}
+
+QRadioButton::indicator:pressed {
+    border: 2px solid #0d47a1;
+}
+
+QRadioButton::indicator:checked:pressed {
+    border: 2px solid #0d47a1;
+    background: qradialgradient(
+        cx:0.5, cy:0.5,
+        fx:0.5, fy:0.5,
+        radius:0.5,
+        stop:0.4 #0d47a1,
+        stop:0.5 transparent
+    );
+}
+
+/* 禁用状态 */
+QRadioButton:disabled {
+    color: #a0a0a0;
+}
+
+QRadioButton::indicator:disabled {
+    border: 2px solid #d0d0d0;
+    background: #f0f0f0;
+}
+
+QRadioButton::indicator:checked:disabled {
+    background: qradialgradient(
+        cx:0.5, cy:0.5,
+        fx:0.5, fy:0.5,
+        radius:0.5,
+        stop:0.4 #a0a0a0,
+        stop:0.5 transparent
+    );
+}
+
+/* LogWidget中的特殊样式 */
+LogWidget QRadioButton {
+    font-size: 16px;
+    spacing: 8px;
+    min-height: 20px;
+}
+
+LogWidget QRadioButton::indicator {
+    width: 18px;
+    height: 18px;
+}
+
+
 /* 日志控件全局样式 */
 LogWidget {
     /* 只保留有效属性 */
