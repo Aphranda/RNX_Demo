@@ -16,8 +16,8 @@ class StatusQueryThread(QThread):
         self.socket = None
         
         # 状态更新控制标志
-        self.update_motion = True
-        self.update_source = True
+        self.update_motion = False
+        self.update_source = False
 
     def run(self):
         axes = ["X", "KU", "K", "KA", "Z"]

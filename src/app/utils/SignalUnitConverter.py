@@ -352,10 +352,10 @@ class SignalUnitConverter:
 
     def validate_power(self, power_str: str) -> Tuple[bool, float, str]:
         """
-        验证并解析功率字符串
+        验证并解析功率或电场强度字符串
         
         参数:
-            power_str: 功率字符串 (如 "10dBm", "-100 mW")
+            power_str: 输入字符串 (如 "10dBm", "-100 mW", "5V/m", "120 dBμV/m")
             
         返回:
             (是否有效, 数值, 单位)
@@ -369,6 +369,7 @@ class SignalUnitConverter:
         has_digit = False
         has_decimal = False
         has_dB = False
+        has_slash = False  # 检查是否有/符号，用于识别电场单位
         
         for c in power_str.strip():
             if c in '0123456789':
@@ -383,6 +384,9 @@ class SignalUnitConverter:
             elif c.lower() == 'd':
                 has_dB = True
                 unit_part.append(c)
+            elif c == '/':
+                has_slash = True
+                unit_part.append(c)
             else:
                 unit_part.append(c)
                 
@@ -392,27 +396,50 @@ class SignalUnitConverter:
         try:
             value = float(''.join(num_part))
             unit = ''.join(unit_part).strip()
-            
-            # 特殊处理dB/dBm/dBW
-            if has_dB:
-                if 'm' in unit.lower():
-                    unit = 'dBm'
-                elif 'w' in unit.lower():
-                    unit = 'dBW'
+            # 判断是否为电场强度单位
+            if has_slash or any(x in unit.lower() for x in ['v/m', 'μv/m', 'uv/m']):
+                # 处理电场强度单位
+                if has_dB:
+                    if 'v/m' in unit.lower() or 'μv/m' in unit.lower():
+                        unit = 'dBμV/m'
+                    else:
+                        unit = 'dBμV/m'  # 默认
                 else:
-                    unit = 'dBm'  # 默认dBm
-            else:
-                unit = self._normalize_power_unit(unit) if unit else self.default_power_unit
-            
-            # 放宽值范围检查
-            if unit in ('dBm', 'dBW'):
-                valid = -300 <= value <= 300  # 扩展范围
-            else:
-                valid = 0 <= value <= 1e12   # 扩展范围
+                    unit = self._normalize_efield_unit(unit) if unit else self.default_efield_unit
                 
+                # 电场强度值范围检查
+                if unit == 'V/m':
+                    valid = 0 <= value <= 1e6
+                elif unit == 'mV/m':
+                    valid = 0 <= value <= 1e9
+                elif unit == 'µV/m':
+                    valid = 0 <= value <= 1e12
+                elif unit == 'dBμV/m':
+                    valid = 0 <= value <= 240  # 约1MV/m
+                else:
+                    valid = False
+            else:
+                # 处理普通功率单位
+                if has_dB:
+                    if 'm' in unit.lower():
+                        unit = 'dBm'
+                    elif 'w' in unit.lower():
+                        unit = 'dBW'
+                    else:
+                        unit = 'dBm'  # 默认dBm
+                else:
+                    unit = self._normalize_power_unit(unit) if unit else self.default_power_unit
+                
+                # 功率值范围检查
+                if unit in ('dBm', 'dBW'):
+                    valid = -300 <= value <= 300  # 扩展范围
+                else:
+                    valid = 0 <= value <= 1e12   # 扩展范围
+                    
             return (valid, value, unit)
         except (ValueError, TypeError):
             return (False, 0.0, 'dBm')
+
 
     def _normalize_freq_unit(self, unit: str) -> str:
         """规范化频率单位"""

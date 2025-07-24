@@ -339,34 +339,67 @@ class MainWindow(MainWindowUI):
 
     def on_power_input_changed(self, text):
         """补偿后功率输入框变化时的处理"""
-        if not self.is_valid_power(text):
-            return
-        
-        if not self.should_process_input(text):
-            return
-        
         # 防止递归触发
         if self.raw_power_input.signalsBlocked():
             return
         
+        # 获取当前选择的功率单位
+        target_unit = self.power_unit_combo.currentText()
+        
+        real_text = text + " " + target_unit
+
         try:
-            power_dbm = float(text.replace("dBm", "").strip())
-            
+            # 验证并解析输入值
+            valid, power_value, power_unit = self.unit_converter.validate_power(real_text)
+            if not valid:
+                return
+                
             # 获取当前频率
             freq_str = self.status_cache["src"].get("freq", "0")
             if not self.is_valid_frequency(freq_str):
                 self.show_status("当前频率无效，无法计算补偿", timeout=3000)
                 return
                 
+            # 转换为GHz单位
             freq_ghz = float(freq_str.replace("GHz", "").strip()) if "GHz" in freq_str else float(freq_str)/1e9
+            
+            # 将输入值转换为dBm
+            if power_unit in ['V/m', 'mV/m', 'µV/m', 'dBμV/m']:
+                # 电场强度单位转换为dBm
+                if power_unit == 'V/m':
+                    power_dbm = self.unit_converter.v_m_to_dbm(power_value, freq_ghz*1e9)
+                elif power_unit == 'mV/m':
+                    power_dbm = self.unit_converter.v_m_to_dbm(power_value/1000, freq_ghz*1e9)
+                elif power_unit == 'µV/m':
+                    power_dbm = self.unit_converter.v_m_to_dbm(power_value/1e6, freq_ghz*1e9)
+                elif power_unit == 'dBμV/m':
+                    power_dbm = self.unit_converter.dbuV_m_to_dbm(power_value, freq_ghz*1e9)
+            else:
+                # 其他功率单位转换为dBm
+                power_dbm, _ = self.unit_converter.convert_power(power_value, power_unit, 'dBm')
             
             # 计算补偿值
             compensation = self.get_compensation_value(freq_ghz) if self.compensation_enabled else 0.0
             raw_power = power_dbm - compensation
+
+            # 根据目标单位转换补偿后的功率值
+            if target_unit in ['V/m', 'mV/m', 'µV/m', 'dBμV/m']:
+                # 转换为电场强度单位
+                if target_unit == 'V/m':
+                    power_value = self.unit_converter.dbm_to_v_m(raw_power, freq_ghz*1e9)
+                elif target_unit == 'mV/m':
+                    power_value = self.unit_converter.dbm_to_v_m(raw_power, freq_ghz*1e9) * 1000
+                elif target_unit == 'µV/m':
+                    power_value = self.unit_converter.dbm_to_v_m(raw_power, freq_ghz*1e9) * 1e6
+                elif target_unit == 'dBμV/m':
+                    power_value = self.unit_converter.dbm_to_dbuV_m(raw_power, freq_ghz*1e9)
+            else:
+                # 转换为其他功率单位
+                power_value, _ = self.unit_converter.convert_power(raw_power, 'dBm', target_unit)
             
             # 更新原始功率输入框（不触发信号）
             self.raw_power_input.blockSignals(True)
-            self.raw_power_input.setText(f"{raw_power:.2f} dBm")
+            self.raw_power_input.setText(f"{power_value:.2f} {target_unit}")
             self.raw_power_input.blockSignals(False)
             
         except ValueError as e:
@@ -374,38 +407,72 @@ class MainWindow(MainWindowUI):
 
     def on_raw_power_input_changed(self, text):
         """原始功率输入框变化时的处理"""
-        if not self.is_valid_power(text):
-            return
-    
-        if not self.should_process_input(text):
-            return
-        
         # 防止递归触发
         if self.power_input.signalsBlocked():
             return
+            
+        # 获取当前选择的功率单位
+        target_unit = self.power_unit_combo.currentText()
+
+        real_text = text + " " + target_unit
         
         try:
-            raw_power = float(text.replace("dBm", "").strip())
-            
+            # 验证并解析输入值
+            valid, raw_power, power_unit = self.unit_converter.validate_power(real_text)
+            if not valid:
+                return
+                
             # 获取当前频率
             freq_str = self.status_cache["src"].get("freq", "0")
             if not self.is_valid_frequency(freq_str):
                 self.show_status("当前频率无效，无法计算补偿", timeout=3000)
                 return
                 
+            # 转换为GHz单位
             freq_ghz = float(freq_str.replace("GHz", "").strip()) if "GHz" in freq_str else float(freq_str)/1e9
+
+            # 将输入值转换为dBm
+            if power_unit in ['V/m', 'mV/m', 'µV/m', 'dBμV/m']:
+                # 电场强度单位转换为dBm
+                if power_unit == 'V/m':
+                    raw_power_dbm = self.unit_converter.v_m_to_dbm(raw_power, freq_ghz*1e9)
+                elif power_unit == 'mV/m':
+                    raw_power_dbm = self.unit_converter.v_m_to_dbm(raw_power/1000, freq_ghz*1e9)
+                elif power_unit == 'µV/m':
+                    raw_power_dbm = self.unit_converter.v_m_to_dbm(raw_power/1e6, freq_ghz*1e9)
+                elif power_unit == 'dBμV/m':
+                    raw_power_dbm = self.unit_converter.dbuV_m_to_dbm(raw_power, freq_ghz*1e9)
+            else:
+                # 其他功率单位转换为dBm
+                raw_power_dbm, _ = self.unit_converter.convert_power(raw_power, power_unit, 'dBm')
             
             # 计算补偿值
             compensation = self.get_compensation_value(freq_ghz) if self.compensation_enabled else 0.0
-            power_dbm = raw_power + compensation
+            power_dbm = raw_power_dbm + compensation
+            
+            # 根据目标单位转换补偿后的功率值
+            if target_unit in ['V/m', 'mV/m', 'µV/m', 'dBμV/m']:
+                # 转换为电场强度单位
+                if target_unit == 'V/m':
+                    power_value = self.unit_converter.dbm_to_v_m(power_dbm, freq_ghz*1e9)
+                elif target_unit == 'mV/m':
+                    power_value = self.unit_converter.dbm_to_v_m(power_dbm, freq_ghz*1e9) * 1000
+                elif target_unit == 'µV/m':
+                    power_value = self.unit_converter.dbm_to_v_m(power_dbm, freq_ghz*1e9) * 1e6
+                elif target_unit == 'dBμV/m':
+                    power_value = self.unit_converter.dbm_to_dbuV_m(power_dbm, freq_ghz*1e9)
+            else:
+                # 转换为其他功率单位
+                power_value, _ = self.unit_converter.convert_power(power_dbm, 'dBm', target_unit)
             
             # 更新补偿后功率输入框（不触发信号）
             self.power_input.blockSignals(True)
-            self.power_input.setText(f"{power_dbm:.2f} dBm")
+            self.power_input.setText(f"{power_value:.2f} {target_unit}")
             self.power_input.blockSignals(False)
             
         except ValueError as e:
             self.log(f"原始功率转换错误: {str(e)}", "WARNING")
+
 
     def load_calibration_file(self, filepath: str):
         """加载校准文件"""
@@ -620,18 +687,29 @@ class MainWindow(MainWindowUI):
 
 
     def send_freq_cmd(self):
-        val = self.freq_input.text().strip()
+        val = self.freq_input.text().strip() + " " + self.freq_unit_combo.currentText()
         if not val:
             self.show_status("请输入频率参数")
             return
         
+        # 验证并解析频率
+        valid, freq_value, freq_unit = self.unit_converter.validate_frequency(val)
+        if not valid:
+            self.show_status("无效的频率格式")
+            self.log("无效的频率输入", "ERROR")
+            return
+        
+        # 转换为GHz单位（假设设备使用GHz）
+        freq_ghz, _ = self.unit_converter.convert_frequency(freq_value, freq_unit, "GHz")
+        
         # 发送频率设置命令
-        cmd = f"SOURce:FREQuency {val}"
+        cmd = f"SOURce:FREQuency {freq_ghz}GHz"
         self.send_and_log(cmd)
         
         # 频率联动逻辑
         if self._is_freq_link_connected:
-            self._control_feed_for_frequency(val)
+            self._control_feed_for_frequency(f"{freq_ghz}GHz")
+
 
     def _control_feed_for_frequency(self, freq_str):
         """根据频率控制对应的馈源轴"""
@@ -717,88 +795,134 @@ class MainWindow(MainWindowUI):
         self.send_and_log(cmd)
 
     def send_power_cmd(self):
-        val = self.power_input.text().strip()
+        val = self.power_input.text().strip() + " " + self.power_unit_combo.currentText()
+        
         if not val:
             self.show_status("请输入功率参数")
             return
         
         try:
-            # 解析输入的功率值
-            desired_power = float(val.replace("dBm", "").strip())
-            
-            # 获取当前频率
+            # 解析输入的功率值和单位
+            valid, power_value, power_unit = self.unit_converter.validate_power(val)
+            if not valid:
+                self.show_status("无效的功率参数")
+                self.log("无效的功率输入", "ERROR")
+                return
+            # 获取当前频率，并且解析单位
             freq_str = self.status_cache["src"].get("freq", "0")
+            freq_str = "15 GHz" # 调试使用
             freq_ghz = float(freq_str.replace("GHz", "").strip()) if "GHz" in freq_str else float(freq_str)/1e9
+
+            
+            # 如果是电场强度单位(V/m)，需要转换为dBm
+            if power_unit in ['V/m', 'dBμV/m']:
+               
+                # 获取当前频率用于转换
+                if not self.is_valid_frequency(freq_str):
+                    self.show_status("当前频率无效，无法转换电场强度", timeout=3000)
+                    return
+                # 将电场强度转换为dBm
+                if power_unit == 'V/m':
+                    power_dbm = self.unit_converter.v_m_to_dbm(power_value, freq_ghz*1e9)
+                elif power_unit == 'mV/m':
+                    power_dbm = self.unit_converter.v_m_to_dbm(power_value/1000, freq_ghz*1e9)
+                elif power_unit == 'µV/m':
+                    power_dbm = self.unit_converter.v_m_to_dbm(power_value/1e6, freq_ghz*1e9)
+                elif power_unit == 'dBμV/m':
+                    power_dbm = self.unit_converter.dbuV_m_to_dbm(power_value, freq_ghz*1e9)
+            else:
+                # 其他功率单位直接转换为dBm
+                power_dbm, _ = self.unit_converter.convert_power(power_value, power_unit, 'dBm')
             
             # 计算补偿值(已包含ref_power处理)
             compensation = self.get_compensation_value(freq_ghz) if self.compensation_enabled else 0.0
             
             # 计算实际需要设置的功率
-            actual_power = desired_power - compensation
+            actual_power = power_dbm - compensation
             
             # 存储原始功率值
-            self.current_power = desired_power
+            self.current_power = power_dbm
             
             cmd = f"SOURce:POWer {actual_power:.2f}"
             self.send_and_log(cmd)
             
             # 增强日志信息
-            log_msg = (f"功率补偿详情:\n"
-                    f"- 期望功率 = {desired_power:.2f} dBm\n"
+            log_msg = (f"功率转换详情:\n"
+                    f"- 输入功率 = {power_value:.2f} {power_unit}\n"
+                    f"- 转换为dBm = {power_dbm:.2f} dBm\n"
                     f"- 补偿值 = {compensation:.2f} dB (已考虑ref_power)\n"
                     f"- 实际设置 = {actual_power:.2f} dBm\n"
                     f"- 当前链路 = {self.parse_link_response(self.status_cache.get('src', {}).get('link', ''))}\n"
                     f"- 参考功率(ref_power) = {self.cal_manager.current_meta.get('ref_power', -30.0)} dBm")
             self.log(log_msg, "INFO")
-        except ValueError:
-            self.show_status("无效的功率参数")
-            self.log("无效的功率参数", "ERROR")
+        except ValueError as e:
+            self.show_status(f"功率转换错误: {str(e)}")
+            self.log(f"功率转换错误: {str(e)}", "ERROR")
+
 
 
 
     def query_power_cmd(self):
         cmd = "READ:SOURce:POWer?"
-        if self.compensation_enabled:
-            # 优先暂停状态线程，防止抢占
-            self.pause_status_thread()
+        target_unit = self.power_unit_combo.currentText()
+        
+        # 暂停状态线程
+        self.pause_status_thread()
+        
+        self.comm_mutex.lock()
+        try:
+            self.log(cmd, "SEND")
+            success, msg = self.tcp_client.send(cmd + '\n')
+            if not success:
+                self.log(f"发送失败: {msg}", "ERROR")
+                self.show_status(msg)
+                return
             
-            self.comm_mutex.lock()
-            try:
-                self.log(cmd, "SEND")
-                success, msg = self.tcp_client.send(cmd + '\n')
-                if not success:
-                    self.log(f"发送失败: {msg}", "ERROR")
-                    self.show_status(msg)
-                    return
-                
-                success, resp = self.tcp_client.receive()
-                if success:
-                    try:
-                        # 解析查询到的功率值
-                        measured_power = float(resp.replace("dBm", "").strip())
-                        
-                        # 获取当前频率
-                        freq_str = self.status_cache["src"].get("freq", "0")
-                        freq_ghz = float(freq_str.replace("GHz", "").strip()) if "GHz" in freq_str else float(freq_str)/1e9
-                        
-                        # 计算补偿值
-                        compensation = self.get_compensation_value(freq_ghz)
-                        actual_power = measured_power + compensation
-                        
-                        self.log(f"{resp} (补偿后: {actual_power:.2f}dBm)", "RECV")
-                        self.show_status(f"查询功率: {actual_power:.2f}dBm (补偿值: {compensation:.2f}dB)")
-                    except ValueError:
-                        self.log(resp, "RECV")
-                        self.show_status("查询功率")
-                else:
-                    self.log(f"接收失败: {resp}", "ERROR")
-                    self.show_status(resp)
-            finally:
-                self.comm_mutex.unlock()
-                # 手动指令完成后重启状态线程
-                self.resume_status_thread()
-        else:
-            self.send_and_log(cmd)
+            success, resp = self.tcp_client.receive()
+            if success:
+                try:
+                    # 解析查询到的功率值(假设设备返回dBm)
+                    measured_power = float(resp.replace("dBm", "").strip())
+                    
+                    # 获取当前频率
+                    freq_str = self.status_cache["src"].get("freq", "0")
+                    freq_ghz = float(freq_str.replace("GHz", "").strip()) if "GHz" in freq_str else float(freq_str)/1e9
+                    
+                    # 计算补偿值
+                    compensation = self.get_compensation_value(freq_ghz) if self.compensation_enabled else 0.0
+                    actual_power = measured_power + compensation
+
+                    # 默认
+                    converted = 0
+                    
+                    # 转换为目标单位
+                    if target_unit in ['V/m', 'mV/m', 'µV/m', 'dBμV/m']:
+                        # 电场强度转换
+                        if target_unit == 'V/m':
+                            converted = self.unit_converter.dbm_to_v_m(actual_power, freq_ghz*1e9)
+                        elif target_unit == 'mV/m':
+                            converted = self.unit_converter.dbm_to_v_m(actual_power, freq_ghz*1e9) * 1000
+                        elif target_unit == 'µV/m':
+                            converted = self.unit_converter.dbm_to_v_m(actual_power, freq_ghz*1e9) * 1e6
+                        elif target_unit == 'dBμV/m':
+                            converted = self.unit_converter.dbm_to_dbuV_m(actual_power, freq_ghz*1e9)
+                    else:
+                        # 普通功率单位转换
+                        converted, _ = self.unit_converter.convert_power(actual_power, 'dBm', target_unit)
+                    
+                    self.log(f"{resp} (补偿后: {converted:.2f}{target_unit})", "RECV")
+                    self.show_status(f"查询功率: {converted:.2f}{target_unit} (补偿值: {compensation:.2f}dB)")
+                except ValueError:
+                    self.log(resp, "RECV")
+                    self.show_status("查询功率")
+            else:
+                self.log(f"接收失败: {resp}", "ERROR")
+                self.show_status(resp)
+        finally:
+            self.comm_mutex.unlock()
+            # 恢复状态线程
+            self.resume_status_thread()
+
 
     def send_output_cmd(self):
         val = self.output_combo.currentText()

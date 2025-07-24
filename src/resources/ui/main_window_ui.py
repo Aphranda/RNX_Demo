@@ -87,14 +87,20 @@ class MainWindowUI(QMainWindow):
         # 信号源控件
         self.freq_input = QLineEdit()
         self.freq_input.setPlaceholderText("如 8GHz")
+        self.freq_unit_combo = QComboBox()
+        self.freq_unit_combo.addItems(["GHz", "MHz", "kHz"])
         self.freq_btn = QPushButton("设置频率")
         self.freq_query_btn = QPushButton("查询频率")
+
         self.power_input = QLineEdit()
         self.power_input.setPlaceholderText("如 -40dBm")
+        self.power_unit_combo = QComboBox()
+        self.power_unit_combo.addItems(["dBm", "W", "mW", "dBμV/m","V/m"])
         self.raw_power_input = QLineEdit()
         self.raw_power_input.setPlaceholderText("信号源实际输出")
         self.power_btn = QPushButton("设置功率")
         self.power_query_btn = QPushButton("查询功率")
+
         self.output_combo = QComboBox()
         self.output_combo.addItems(["ON", "OFF"])
         self.output_btn = QPushButton("设置输出")
@@ -283,21 +289,23 @@ class MainWindowUI(QMainWindow):
         # 第一行 - 频率设置
         src_layout.addWidget(QLabel("信号频率:"), 0, 0)
         src_layout.addWidget(self.freq_input, 0, 1, 1, 2)
-        src_layout.addWidget(self.freq_btn, 0, 3)
-        src_layout.addWidget(self.freq_query_btn, 0, 4)
+        src_layout.addWidget(self.freq_unit_combo, 0, 3)
+        src_layout.addWidget(self.freq_btn, 0, 4)
+        src_layout.addWidget(self.freq_query_btn, 0, 5)
         
         # 第二行 - 功率设置
         src_layout.addWidget(QLabel("馈源功率:"), 1, 0)
         src_layout.addWidget(self.power_input, 1, 1)
         src_layout.addWidget(self.raw_power_input, 1, 2)
-        src_layout.addWidget(self.power_btn, 1, 3)
-        src_layout.addWidget(self.power_query_btn, 1, 4)
+        src_layout.addWidget(self.power_unit_combo, 1, 3)
+        src_layout.addWidget(self.power_btn, 1, 4)
+        src_layout.addWidget(self.power_query_btn, 1, 5)
         
         # 第三行 - RF输出
         src_layout.addWidget(QLabel("RF输出:"), 2, 0)
-        src_layout.addWidget(self.output_combo, 2, 1, 1, 2)
-        src_layout.addWidget(self.output_btn, 2, 3)
-        src_layout.addWidget(self.output_query_btn, 2, 4)
+        src_layout.addWidget(self.output_combo, 2, 1, 1, 3)
+        src_layout.addWidget(self.output_btn, 2, 4)
+        src_layout.addWidget(self.output_query_btn, 2, 5)
         
         right_panel.addWidget(src_group)
         
