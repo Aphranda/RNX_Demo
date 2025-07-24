@@ -349,14 +349,11 @@ class MainWindow(MainWindowUI):
         if self.raw_power_input.signalsBlocked():
             return
         
-        print("PT DEBUG:START3")
-        
         try:
             power_dbm = float(text.replace("dBm", "").strip())
             
             # 获取当前频率
             freq_str = self.status_cache["src"].get("freq", "0")
-            print("freq_str:",freq_str)
             if not self.is_valid_frequency(freq_str):
                 self.show_status("当前频率无效，无法计算补偿", timeout=3000)
                 return
@@ -367,7 +364,6 @@ class MainWindow(MainWindowUI):
             compensation = self.get_compensation_value(freq_ghz) if self.compensation_enabled else 0.0
             raw_power = power_dbm - compensation
             
-            print(raw_power)
             # 更新原始功率输入框（不触发信号）
             self.raw_power_input.blockSignals(True)
             self.raw_power_input.setText(f"{raw_power:.2f} dBm")
