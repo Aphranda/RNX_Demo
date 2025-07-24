@@ -2,9 +2,10 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGridLayout, 
     QGroupBox, QLineEdit, QPushButton, QSizePolicy
 )
-from widgets.AutoFontSizeComboBox import AutoFontSizeComboBox
-from widgets.AutoFontSizeLabel import AutoFontSizeLabel
 from PyQt5.QtCore import Qt
+from app.widgets.AutoFontSizeComboBox import AutoFontSizeComboBox
+from app.widgets.AutoFontSizeLabel import AutoFontSizeLabel
+
 
 class StatusPanelView(QWidget):
     def __init__(self, parent=None):

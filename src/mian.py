@@ -13,8 +13,6 @@ from pathlib import Path
 BASE_DIR = Path(__file__).parent.parent
 sys.path.append(str(BASE_DIR))
 
-
-
 from app.core.tcp_client import TcpClient
 from app.main_window import MainWindow
 from app.utils.ProcessManager import ProcessManager

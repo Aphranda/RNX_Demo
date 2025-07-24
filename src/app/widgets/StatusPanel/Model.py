@@ -1,5 +1,5 @@
 from typing import Dict, Optional
-from utils.SignalUnitConverter import SignalUnitConverter
+from app.utils.SignalUnitConverter import SignalUnitConverter
 
 class StatusPanelModel:
     def __init__(self):
