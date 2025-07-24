@@ -16,6 +16,7 @@ class StatusPanelController(QObject):
     motion_command = pyqtSignal(str)
     operation_completed = pyqtSignal(str, bool)  # axis, succes
     
+    
     def __init__(self, view: StatusPanelView, model: StatusPanelModel):
         super().__init__()
         self.view = view
@@ -44,6 +45,9 @@ class StatusPanelController(QObject):
         self.operation_timeout = QTimer()
         self.operation_timeout.setSingleShot(True)
         self.operation_timeout.timeout.connect(self._on_operation_timeout)
+
+        # 界面获取数据
+        self._main_window = None
         
         self.setup_connections()
         self.initialize_units()
@@ -80,6 +84,13 @@ class StatusPanelController(QObject):
                 'rf': '-'
             })
             self.update_ui()
+
+    def get_compensation_value(self, freq_ghz: float) -> float:
+        """获取补偿值"""
+        if hasattr(self, '_main_window') and self._main_window:
+            return self._main_window.get_compensation_value(freq_ghz)
+        return 0.0
+
 
     def setup_connections(self):
         # 单位选择变化
@@ -378,13 +389,28 @@ class StatusPanelController(QObject):
                 for key, value in status.items():
                     if key == 'freq':
                         formatted_status[key] = self._format_quantity(value, 'frequency')
-                    elif key in ('power', 'raw_power'):
-                        formatted_status[key] = self._format_quantity(value, 'power', 
-                                                'src_power' if key == 'power' else 'raw_power')
+                    elif key == 'power':
+                        # 获取当前频率
+                        freq_str = status.get('freq', '0')
+                        try:
+                            freq_ghz = float(freq_str.replace('GHz', '').strip()) if 'GHz' in freq_str else float(freq_str)/1e9
+                            # 应用补偿值
+                            compensation = self.get_compensation_value(freq_ghz)
+                            compensated_power = float(value) + compensation
+                            formatted_status[key] = self._format_quantity(str(compensated_power), 'power', 'src_power')
+                            # 同时更新原始功率
+                            formatted_status['raw_power'] = self._format_quantity(value, 'power', 'raw_power')
+                        except ValueError:
+                            formatted_status[key] = self._format_quantity(value, 'power', 'src_power')
+                    elif key == 'raw_power':
+                        # 原始功率不应用补偿
+                        if 'power' not in formatted_status:  # 如果power还没处理过
+                            formatted_status[key] = self._format_quantity(value, 'power', 'raw_power')
                     else:
                         formatted_status[key] = value
                 self.model.update_src_status(formatted_status)
             self.update_ui()
+
 
 
     def update_operation_status(self, axis_status: dict = None):

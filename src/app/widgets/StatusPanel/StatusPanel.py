@@ -22,6 +22,11 @@ class StatusPanel(QWidget):
         
         # 暴露常用信号
         self.cal_file_loaded = self._controller.cal_file_loaded
+        
+    def set_main_window(self, main_window):
+        """设置对主窗口的引用"""
+        self._controller._main_window = main_window
+
 
     # 兼容旧版API
     @property

@@ -267,7 +267,21 @@ class CalibrationController(QObject):
     # region 校准流程控制
     def _on_start(self):
         """处理开始校准按钮点击"""
-        ref_power = self._view.ref_power.value()
+        # 确定极化模式
+        if self._view.theta_radio.isChecked():
+            polarization = "THETA"
+        elif self._view.phi_radio.isChecked():
+            polarization = "PHI"
+        else:
+            polarization = "DUAL"
+        
+        # 构建基础参数
+        base_param = {
+            'ref_power': self._view.ref_power.value(),
+            'polarization': polarization,
+            'distance': 1.0,  # 默认距离1米
+            'operator': "SYSTEM"  # 默认操作员
+        }
         
         if self._view.range_mode.isChecked():
             # 范围模式
@@ -292,11 +306,12 @@ class CalibrationController(QObject):
             self.cal_manager.create_new_calibration(
                 equipment_meta=equipment_meta,
                 freq_params=freq_params,
-                version_notes=f"REF_POWER{ref_power}dBm"
+                base_param=base_param,
+                version_notes="Auto generated calibration file"
             )
             
             # 触发校准信号
-            self.calibration_triggered.emit(start, stop, step, ref_power)
+            self.calibration_triggered.emit(start, stop, step, base_param['ref_power'])
         else:
             # 频点列表模式
             if not self._freq_list:
@@ -308,7 +323,7 @@ class CalibrationController(QObject):
             freq_params = {
                 'start_ghz': min(self._freq_list),
                 'stop_ghz': max(self._freq_list),
-                'step_ghz': "FREQLIST",
+                'step_ghz': "-FreqList",
                 'custom_freqs': self._freq_list,
             }
             
@@ -316,11 +331,13 @@ class CalibrationController(QObject):
             self.cal_manager.create_new_calibration(
                 equipment_meta=equipment_meta,
                 freq_params=freq_params,
-                version_notes=f"REF_POWER{ref_power}dBm"
+                base_param=base_param,
+                version_notes="Auto generated calibration file with custom frequency list"
             )
             
             # 触发校准信号
-            self.calibration_triggered_with_list.emit(self._freq_list, ref_power)
+            self.calibration_triggered_with_list.emit(self._freq_list, base_param['ref_power'])
+
 
     def _start_calibration_process(self, start: float, stop: float, step: float, ref_power: float):
         """处理范围模式校准启动"""
@@ -388,7 +405,7 @@ class CalibrationController(QObject):
     def _prepare_equipment_meta(self) -> Dict:
         """准备设备元数据"""
         return {
-            'operator': '操作员名称',
+            'operator': 'Default',
             'signal_gen': (
                 self._model.signal_gen.model if hasattr(self._model.signal_gen, 'model') else '未知',
                 self._model.signal_gen.serial_number if hasattr(self._model.signal_gen, 'serial_number') else '未知'
@@ -403,6 +420,7 @@ class CalibrationController(QObject):
             ),
             'environment': (25.0, 50.0)  # 温度, 湿度
         }
+
 
     # endregion
 

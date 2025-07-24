@@ -29,6 +29,8 @@ class MainWindow(MainWindowUI):
         self.scpi = SCPICommands(self.tcp_client, self.comm_mutex)
         self.scpi.command_executed.connect(self._handle_scpi_response)
 
+        self.status_panel.set_main_window(self)
+
         # 初始化状态缓存
         self._init_status_cache()
         
@@ -443,6 +445,11 @@ class MainWindow(MainWindowUI):
     
             if result:
                 self.calibration_data = result['data']
+                ref_power = result['meta'].get('ref_power', -30.0)
+                self.log(f"校准文件加载成功，参考功率(ref_power)为: {ref_power} dBm", "INFO")
+                self.compensation_enabled = True
+
+                self.calibration_data = result['data']
                 self.compensation_enabled = True
                 self.status_panel.update_src_status({"cal_file": "Calib Load"})
 
@@ -530,11 +537,17 @@ class MainWindow(MainWindowUI):
         
     def get_compensation_value(self, freq_ghz: float) -> float:
         """
-        根据频率获取补偿值
+        根据频率获取补偿值，已考虑参考功率(ref_power)
         :param freq_ghz: 频率(GHz)
         :return: 补偿值(dB)
         """
         if not self.compensation_enabled or not self.calibration_data:
+            return 0.0
+        
+        # 检查频率是否在校准范围内
+        freqs = [point['freq'] for point in self.calibration_data]
+        if freq_ghz < min(freqs) or freq_ghz > max(freqs):
+            self.log(f"警告：频率{freq_ghz}GHz超出校准范围({min(freqs)}-{max(freqs)}GHz)", "WARNING")
             return 0.0
         
         # 找到最接近的频率点
@@ -543,13 +556,26 @@ class MainWindow(MainWindowUI):
         # 获取当前链路模式
         current_link = self.parse_link_response(self.status_cache.get("src", {}).get("link", ""))
         
-        # 根据链路模式选择使用Theta_corrected还是Phi_corrected
+        # 获取参考功率(从校准文件元数据中获取)
+        ref_power = float(self.cal_manager.current_meta.get('ref_power', -30.0))  # 默认-30dBm
+        
+        # 根据链路模式选择使用Theta_corrected还是Phi_corrected，并减去参考功率
         if "THETA" in current_link:
-            return closest_point.get('theta_corrected', 0.0)
+            raw_comp = closest_point.get('theta_corrected', 0.0)
+            compensation = raw_comp - ref_power
+            self.log(f"补偿计算: THETA_raw={raw_comp}dB, ref_power={ref_power}dB, 最终补偿={compensation}dB", "DEBUG")
+            return compensation
         elif "PHI" in current_link:
-            return closest_point.get('phi_corrected', 0.0)
+            raw_comp = closest_point.get('phi_corrected', 0.0)
+            compensation = raw_comp - ref_power
+            self.log(f"补偿计算: PHI_raw={raw_comp}dB, ref_power={ref_power}dB, 最终补偿={compensation}dB", "DEBUG")
+            return compensation
         else:
-            return 0.0  # 默认情况
+            self.log("未知链路模式，使用默认补偿值0dB", "WARNING")
+            return 0.0
+
+
+
 
 
     # --- 指令组合与发送 ---
@@ -702,26 +728,37 @@ class MainWindow(MainWindowUI):
         
         try:
             # 解析输入的功率值
-            power_dbm = float(val.replace("dBm", "").strip())
+            desired_power = float(val.replace("dBm", "").strip())
             
             # 获取当前频率
             freq_str = self.status_cache["src"].get("freq", "0")
             freq_ghz = float(freq_str.replace("GHz", "").strip()) if "GHz" in freq_str else float(freq_str)/1e9
             
-            # 计算补偿值
+            # 计算补偿值(已包含ref_power处理)
             compensation = self.get_compensation_value(freq_ghz) if self.compensation_enabled else 0.0
-            compensated_power = power_dbm - compensation
+            
+            # 计算实际需要设置的功率
+            actual_power = desired_power - compensation
             
             # 存储原始功率值
-            self.current_power = power_dbm
+            self.current_power = desired_power
             
-            cmd = f"SOURce:POWer {compensated_power:.2f}"
+            cmd = f"SOURce:POWer {actual_power:.2f}"
             self.send_and_log(cmd)
             
-            self.log(f"功率补偿: 设置值={power_dbm:.2f}dBm, 补偿值={compensation:.2f}dB, 实际设置={compensated_power:.2f}dBm", "INFO")
+            # 增强日志信息
+            log_msg = (f"功率补偿详情:\n"
+                    f"- 期望功率 = {desired_power:.2f} dBm\n"
+                    f"- 补偿值 = {compensation:.2f} dB (已考虑ref_power)\n"
+                    f"- 实际设置 = {actual_power:.2f} dBm\n"
+                    f"- 当前链路 = {self.parse_link_response(self.status_cache.get('src', {}).get('link', ''))}\n"
+                    f"- 参考功率(ref_power) = {self.cal_manager.current_meta.get('ref_power', -30.0)} dBm")
+            self.log(log_msg, "INFO")
         except ValueError:
             self.show_status("无效的功率参数")
             self.log("无效的功率参数", "ERROR")
+
+
 
     def query_power_cmd(self):
         cmd = "READ:SOURce:POWer?"

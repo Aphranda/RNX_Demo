@@ -63,7 +63,7 @@ class StatusQueryThread(QThread):
                         status["src"]["freq"] = freq
                     elif axis_idx == 1:
                         power = self.query_status("READ:SOURce:POWer?")
-                        status["src"]["power"] = power
+                        status["src"]["raw_power"] = power
                     elif axis_idx == 2:
                         rf = self.query_status("READ:SOURce:OUTPut?")
                         status["src"]["rf"] = rf

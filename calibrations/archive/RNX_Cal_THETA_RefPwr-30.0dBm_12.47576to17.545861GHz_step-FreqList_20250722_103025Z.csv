@@ -1,0 +1,45 @@
+!RNX Dual-Polarized Feed Calibration Data
+!Created: 20250722T103025ZZ
+!Operator: Default
+!Base Parameters:
+!  Reference_Power: -30.0 dBm
+!  Polarization: THETA
+!  Distance: 1.0 m
+!Equipment:
+!  Signal_Generator: PLASG-T8G40G_SN:
+!  Spectrum_Analyzer: NRP50S_SN:
+!  Antenna: RNX_ANT_SN:SN00000
+!Environment: 25.0C, 50.0%RH
+!Frequency:
+!  Start: 12.47576 GHz
+!  Stop: 17.545861 GHz
+!  Step: -FreqList GHz
+!  Points: 13
+!Data Columns:
+!  1: Frequency(GHz)
+!  2: Theta(dB)
+!  3: Phi(dB)
+!  4: Horn_Gain(GHz)
+!  5: Theta_corrected(dB)
+!  6: Phi_corrected(dB)
+!  7: Theta_corrected_V/M(V/M)
+!  8: Phi_corrected_V/M(V/M)
+Frequency,Theta,Phi,Horn_Gain,Theta_corrected,Phi_corrected,Theta_corrected_V/M,Phi_corrected_V/M
+!VersionNotes: Auto generated calibration file with custom frequency list
+!BaseParams: {"ref_power": -30.0, "polarization": "THETA", "distance": 1.0, "operator": "SYSTEM"}
+12.475760,-25.28,-25.28,12.15972,-37.44,-37.44,1.22,1.22
+12.624490,-24.98,-24.96,12.11217,-37.09,-37.07,1.28,1.28
+13.170800,-26.48,-26.46,11.87820,-38.36,-38.34,1.15,1.16
+13.360197,-26.43,-26.47,11.99533,-38.42,-38.46,1.16,1.16
+13.918437,-27.43,-27.42,12.29154,-39.72,-39.71,1.04,1.04
+14.154209,-28.13,-28.07,12.58849,-40.72,-40.66,0.95,0.95
+14.723743,-29.33,-29.30,12.97242,-42.30,-42.27,0.82,0.82
+15.012421,-30.04,-30.01,13.14825,-43.19,-43.16,0.75,0.76
+15.592385,-29.63,-29.63,13.88963,-43.52,-43.52,0.75,0.75
+15.941456,-30.34,-30.34,14.11886,-44.46,-44.46,0.69,0.69
+16.530715,-30.14,-30.16,14.73334,-44.87,-44.89,0.68,0.68
+16.948774,-30.48,-30.46,14.75057,-45.23,-45.21,0.67,0.68
+17.545861,-28.99,-28.99,16.49050,-45.48,-45.49,0.68,0.68
+!EndOfData: 2025-07-22T10:30:30Z
+!Notes: The calibration file for actual calibrated output
+!MD5: 8fa0dfc05f314c388cb2489b9b9bbfd9

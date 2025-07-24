@@ -198,30 +198,36 @@ class CalibrationFileManager:
         return archived_path
 
     def create_new_calibration(self, 
-                             equipment_meta: Dict, 
-                             freq_params: Dict, 
-                             version_notes: Optional[str] = None) -> str:
+                            equipment_meta: Dict, 
+                            freq_params: Dict,
+                            base_param: Dict,
+                            version_notes: Optional[str] = None) -> str:
         """
         创建新校准文件
         
         :param equipment_meta: 设备元数据
         :param freq_params: 频率参数
+        :param base_param: 基础参数 {ref_power: float, polarization: str}
         :param version_notes: 版本说明
         :return: 创建的校准文件路径
         """
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%SZ")
+        
+        # 从base_param获取参考功率和极化信息
+        ref_power = base_param.get('ref_power', 'UNKNOWN')
+        polarization = base_param.get('polarization', 'DUAL').upper()
         
         # 计算总点数
         if freq_params.get("custom_freqs"):
             points = len(freq_params["custom_freqs"])
         else:
             points = int((freq_params['stop_ghz'] - freq_params['start_ghz']) / freq_params['step_ghz']) + 1
- 
+
         # 生成文件名
         step_str = "NONE" if freq_params.get("step_ghz") == "FreqList" else f"{freq_params['step_ghz']}"
         filename = (
-            f"RNX_Cal_DualPol_"
-            f"{version_notes}_"
+            f"RNX_Cal_{polarization}_"
+            f"RefPwr{ref_power}dBm_"
             f"{freq_params['start_ghz']}to{freq_params['stop_ghz']}GHz_"
             f"step{step_str}_{timestamp}.csv"
         )
@@ -231,10 +237,11 @@ class CalibrationFileManager:
         self.current_meta = {
             **equipment_meta,
             'freq_params': freq_params,
+            'base_param': base_param,  # 保存基础参数
             'created': timestamp,
             'points': points,
             'version_notes': version_notes,
-            'file_format': 'csv+bin'  # 标记文件格式
+            'file_format': 'csv+bin'
         }
         self._data_points = []  # 重置数据点
         
@@ -243,19 +250,27 @@ class CalibrationFileManager:
             f.write(self._generate_header())
             if version_notes:
                 f.write(f"!VersionNotes: {version_notes}\n")
+            # 写入基础参数
+            f.write(f"!BaseParams: {json.dumps(base_param)}\n")
         
         self.log(f"创建新校准文件: {filename}", "INFO")
         return self.active_file
-    
+
+
     def _generate_header(self) -> str:
         """生成标准文件头"""
         meta = self.current_meta
         freq = meta['freq_params']
+        base = meta.get('base_param', {})
         
         header_lines = [
             "!RNX Dual-Polarized Feed Calibration Data",
             f"!Created: {meta['created'].replace('_', 'T')}Z",
             f"!Operator: {meta['operator']}",
+            "!Base Parameters:",
+            f"!  Reference_Power: {base.get('ref_power', 'UNKNOWN')} dBm",
+            f"!  Polarization: {base.get('polarization', 'DUAL')}",
+            f"!  Distance: {base.get('distance', 1.0)} m",
             "!Equipment:",
             f"!  Signal_Generator: {meta['signal_gen'][0]}_SN:{meta['signal_gen'][1]}",
             f"!  Spectrum_Analyzer: {meta['power_meter'][0]}_SN:{meta['power_meter'][1]}",
@@ -278,6 +293,7 @@ class CalibrationFileManager:
             "Frequency,Theta,Phi,Horn_Gain,Theta_corrected,Phi_corrected,Theta_corrected_V/M,Phi_corrected_V/M"
         ]
         return '\n'.join(header_lines) + '\n'
+
 
     def add_data_point(self, freq_ghz: float, data: Dict) -> bool:
         """
@@ -461,9 +477,8 @@ class CalibrationFileManager:
         验证BIN格式校准文件结构是否有效
         不解析具体内容，只检查文件格式和完整性
         
-        更新说明：
-        1. 每个数据点现在包含8个参数（频率 + 7个参数）
-        2. 数据点大小调整为32字节（8个float32）
+        更新内容：
+        1. 增加对元数据中基础参数的校验
         """
         try:
             with open(filepath, 'rb') as f:
@@ -480,18 +495,38 @@ class CalibrationFileManager:
                 
                 # 读取元数据长度
                 meta_len = int.from_bytes(f.read(4), 'little')
-                # 跳过元数据
-                f.seek(meta_len, 1)
+                meta_json = f.read(meta_len).decode('utf-8')
                 
+                # 验证元数据中的基础参数
+                try:
+                    meta = json.loads(meta_json)
+                    if 'base_param' not in meta:
+                        self.log("缺少基础参数", "WARNING")
+                        return False
+                        
+                    required_params = ['ref_power', 'polarization']
+                    for param in required_params:
+                        if param not in meta['base_param']:
+                            self.log(f"缺少必需的基础参数: {param}", "WARNING")
+                            return False
+                            
+                    if meta['base_param']['polarization'] not in ['THETA', 'PHI', 'DUAL']:
+                        self.log(f"无效的极化模式: {meta['base_param']['polarization']}", "WARNING")
+                        return False
+                        
+                except json.JSONDecodeError:
+                    self.log("元数据JSON格式错误", "WARNING")
+                    return False
+                    
                 # 检查数据点数量
                 file_size = os.path.getsize(filepath)
-                header_size = 4 + 1 + 4 + meta_len  # 幻数+版本+长度+元数据
+                header_size = 4 + 1 + 4 + meta_len
                 data_size = file_size - header_size
                 
-                if data_size % 32 != 0:  # 每个数据点32字节(8个float32)
+                if data_size % 32 != 0:
                     self.log("数据大小不匹配", "WARNING")
                     return False
-                
+                    
                 return True
                 
         except Exception as e:
@@ -503,9 +538,9 @@ class CalibrationFileManager:
         读取已验证的BIN文件内容
         假设文件已经通过验证，直接解析内容
         
-        更新说明：
-        1. 数据点现在包含8个参数（频率 + 7个参数）
-        2. 更新数据结构以匹配新的CSV模板
+        更新内容：
+        1. 确保正确解析和验证基础参数
+        2. 保持与CSV文件相同的数据结构
         """
         try:
             with open(bin_path, 'rb') as f:
@@ -515,6 +550,27 @@ class CalibrationFileManager:
                 meta_len = int.from_bytes(f.read(4), 'little')
                 meta_json = f.read(meta_len).decode('utf-8')
                 meta = json.loads(meta_json)
+                
+                # 验证基础参数完整性
+                if 'base_param' not in meta:
+                    self.log("BIN文件缺少基础参数", "ERROR")
+                    return None
+                    
+                required_params = ['ref_power', 'polarization']
+                for param in required_params:
+                    if param not in meta['base_param']:
+                        self.log(f"BIN文件缺少必需的基础参数: {param}", "ERROR")
+                        return None
+                
+                # 验证极化模式
+                if meta['base_param']['polarization'] not in ['THETA', 'PHI', 'DUAL']:
+                    self.log(f"BIN文件无效的极化模式: {meta['base_param']['polarization']}", "ERROR")
+                    return None
+                    
+                # 验证参考功率范围
+                if not (-100 <= meta['base_param']['ref_power'] <= 100):
+                    self.log(f"BIN文件参考功率超出范围: {meta['base_param']['ref_power']}", "ERROR")
+                    return None
                 
                 # 读取数据点
                 data_points = []
@@ -537,23 +593,41 @@ class CalibrationFileManager:
                         'phi_corrected_vm': data[6]
                     })
                 
+                # 确保元数据包含所有必需字段
+                if 'operator' not in meta:
+                    meta['operator'] = '未知'
+                if 'environment' not in meta:
+                    meta['environment'] = (0.0, 0.0)
+                if 'freq_params' not in meta:
+                    # 从数据点推断频率参数
+                    freqs = [p['freq'] for p in data_points]
+                    meta['freq_params'] = {
+                        'start_ghz': min(freqs),
+                        'stop_ghz': max(freqs),
+                        'step_ghz': 'FreqList' if len(freqs) > 1 else 0.0,
+                        'custom_freqs': sorted(freqs)
+                    }
+                
                 self.current_meta = meta
                 self.data_points = data_points
                 return {
                     'meta': meta,
                     'data': data_points
                 }
+                
         except Exception as e:
             self.log(f"读取二进制文件内容失败: {str(e)}", "ERROR")
             return None
+
 
     def _validate_csv_file(self, filepath: str) -> bool:
         """
         验证CSV格式校准文件结构是否有效
         不解析具体数据值，只检查文件结构和元数据
         
-        改进点：
-        1. 更宽松地验证数据行格式
+        更新内容：
+        1. 增加对基础参数部分的校验
+        2. 更新必需字段列表
         """
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
@@ -564,10 +638,11 @@ class CalibrationFileManager:
                 self.log("无效的文件头", "WARNING")
                 return False
                 
-            # 定义必需的头字段
+            # 定义必需的头字段（更新后）
             REQUIRED_HEADERS = {
-                "!Created:", "!Operator:", "!Equipment:", 
-                "!  Signal_Generator:", "!  Spectrum_Analyzer:", "!  Antenna:", 
+                "!Created:", "!Operator:", 
+                "!Base Parameters:", "!  Reference_Power:", "!  Polarization:", "!  Distance:",
+                "!Equipment:", "!  Signal_Generator:", "!  Spectrum_Analyzer:", "!  Antenna:", 
                 "!Environment:", "!Frequency:", "!  Start:", "!  Stop:", 
                 "!  Step:", "!  Points:", "!Data Columns:"
             }
@@ -595,29 +670,34 @@ class CalibrationFileManager:
                 self.log("缺少MD5校验", "WARNING")
                 return False
                 
+            # 检查基础参数JSON格式
+            base_params_lines = [line for line in header_lines if line.startswith("!BaseParams:")]
+            if base_params_lines:
+                try:
+                    json.loads(base_params_lines[0].split(":", 1)[1].strip())
+                except json.JSONDecodeError:
+                    self.log("基础参数JSON格式错误", "WARNING")
+                    return False
+                    
             return True
             
         except Exception as e:
             self.log(f"验证CSV文件失败: {str(e)}", "ERROR")
             return False
 
-
     def _read_csv_content(self, csv_path: str) -> Optional[Dict]:
         """
         读取已验证的CSV文件内容
         假设文件已经通过验证，直接解析内容
         
-        改进点：
-        1. 过滤Excel可能添加的多余逗号
-        2. 更健壮的数据行解析
+        更新内容：
+        1. 完善所有元数据字段的解析
+        2. 修复字段提取逻辑
         """
         def clean_line(line: str) -> str:
             """清理数据行，移除多余逗号和空格"""
-            # 移除行首行尾空格和引号
             line = line.strip().strip('"\'')
-            # 合并连续的逗号
             line = re.sub(r',+', ',', line)
-            # 移除行尾的逗号
             line = re.sub(r',$', '', line)
             return line
 
@@ -637,6 +717,11 @@ class CalibrationFileManager:
                     'start_ghz': 0.0,
                     'stop_ghz': 0.0,
                     'step_ghz': 0.0
+                },
+                'base_param': {
+                    'ref_power': 0.0,
+                    'polarization': 'DUAL',
+                    'distance': 1.0
                 }
             }
             
@@ -651,7 +736,15 @@ class CalibrationFileManager:
                     
                     # 解析创建时间
                     if line.startswith('!Created:'):
-                        meta['created'] = line.split(':', 1)[1].strip()
+                        created_str = line.split(':', 1)[1].strip()
+                        try:
+                            # 尝试解析ISO格式时间
+                            meta['created'] = datetime.strptime(
+                                created_str.replace('Z', ''), 
+                                "%Y%m%dT%H%M%S"
+                            ).isoformat()
+                        except ValueError:
+                            meta['created'] = created_str
                     
                     # 解析操作员
                     elif line.startswith('!Operator:'):
@@ -659,41 +752,76 @@ class CalibrationFileManager:
                     
                     # 解析信号源信息
                     elif line.startswith('!  Signal_Generator:'):
-                        parts = line.split('_SN:')
-                        model = parts[0].split(':', 1)[1].strip()
+                        parts = re.split(r'_SN:', line.split(':', 1)[1].strip())
+                        model = parts[0].strip()
                         sn = parts[1].strip() if len(parts) > 1 else '未知'
                         meta['signal_gen'] = (model, sn)
                     
                     # 解析功率计信息
                     elif line.startswith('!  Spectrum_Analyzer:'):
-                        parts = line.split('_SN:')
-                        model = parts[0].split(':', 1)[1].strip()
+                        parts = re.split(r'_SN:', line.split(':', 1)[1].strip())
+                        model = parts[0].strip()
                         sn = parts[1].strip() if len(parts) > 1 else '未知'
                         meta['power_meter'] = (model, sn)
                     
                     # 解析天线信息
                     elif line.startswith('!  Antenna:'):
-                        parts = line.split('_SN:')
-                        model = parts[0].split(':', 1)[1].strip()
+                        parts = re.split(r'_SN:', line.split(':', 1)[1].strip())
+                        model = parts[0].strip()
                         sn = parts[1].strip() if len(parts) > 1 else '未知'
                         meta['antenna'] = (model, sn)
                     
                     # 解析环境信息
                     elif line.startswith('!Environment:'):
                         env_parts = line.split(':', 1)[1].strip().split(',')
-                        temp = float(env_parts[0].replace('C', '').strip())
-                        humidity = float(env_parts[1].replace('%RH', '').strip())
-                        meta['environment'] = (temp, humidity)
+                        try:
+                            temp = float(env_parts[0].replace('C', '').strip())
+                            humidity = float(env_parts[1].replace('%RH', '').strip())
+                            meta['environment'] = (temp, humidity)
+                        except (ValueError, IndexError):
+                            meta['environment'] = (0.0, 0.0)
                     
                     # 解析频率参数
                     elif line.startswith('!  Start:'):
-                        meta['freq_params']['start_ghz'] = float(line.split(':', 1)[1].replace('GHz', '').strip())
+                        try:
+                            meta['freq_params']['start_ghz'] = float(
+                                line.split(':', 1)[1].replace('GHz', '').strip()
+                            )
+                        except ValueError:
+                            meta['freq_params']['start_ghz'] = 0.0
+                    
                     elif line.startswith('!  Stop:'):
-                        meta['freq_params']['stop_ghz'] = float(line.split(':', 1)[1].replace('GHz', '').strip())
+                        try:
+                            meta['freq_params']['stop_ghz'] = float(
+                                line.split(':', 1)[1].replace('GHz', '').strip()
+                            )
+                        except ValueError:
+                            meta['freq_params']['stop_ghz'] = 0.0
+                    
                     elif line.startswith('!  Step:'):
-                        meta['freq_params']['step_ghz'] = float(line.split(':', 1)[1].replace('GHz', '').strip())
+                        step_str = line.split(':', 1)[1].replace('GHz', '').strip()
+                        if step_str == 'FreqList':
+                            meta['freq_params']['step_ghz'] = 'FreqList'
+                        else:
+                            try:
+                                meta['freq_params']['step_ghz'] = float(step_str)
+                            except ValueError:
+                                meta['freq_params']['step_ghz'] = 0.0
+                    
                     elif line.startswith('!  Points:'):
-                        meta['points'] = int(line.split(':', 1)[1].strip())
+                        try:
+                            meta['points'] = int(line.split(':', 1)[1].strip())
+                        except ValueError:
+                            meta['points'] = 0
+                    
+                    # 解析基础参数
+                    elif line.startswith('!BaseParams:'):
+                        try:
+                            base_params = json.loads(line.split(':', 1)[1].strip())
+                            if isinstance(base_params, dict):
+                                meta['base_param'].update(base_params)
+                        except json.JSONDecodeError:
+                            self.log("基础参数JSON解析失败", "WARNING")
                     
                     # 解析版本说明
                     elif line.startswith('!VersionNotes:'):
@@ -710,6 +838,13 @@ class CalibrationFileManager:
                 else:
                     break  # 遇到数据行时停止解析头部
             
+            # 验证基础参数
+            required_base_params = ['ref_power', 'polarization']
+            for param in required_base_params:
+                if param not in meta['base_param']:
+                    self.log(f"缺少必需的基础参数: {param}", "WARNING")
+                    return None
+                    
             # 使用csv.reader读取数据部分
             data_points = []
             with open(csv_path, 'r', encoding='utf-8') as f:
@@ -730,43 +865,20 @@ class CalibrationFileManager:
                     # 清理行数据
                     cleaned_row = [cell.strip() for cell in row if cell.strip()]
                     
-                    # 确保有足够的数据列
                     if len(cleaned_row) < 8:
-                        self.log(f"数据行列数不足(需要8列，实际{len(cleaned_row)}列): {row}", "WARNING")
                         continue
                     
                     try:
                         freq = float(cleaned_row[0])
-                        # 验证频率值范围 (假设在0.1-100 GHz之间)
-                        if not (0.1 <= freq <= 100.0):
-                            self.log(f"频率值{freq}GHz超出有效范围(0.1-100GHz)", "WARNING")
-                            continue
-                        
-                        # 验证补偿值范围 (假设在-100到100 dB之间)
-                        compensation_values = []
-                        for val in cleaned_row[1:8]:
-                            try:
-                                num = float(val)
-                                if not (-100 <= num <= 100):
-                                    self.log(f"补偿值超出有效范围(-100-100dB): {val}", "WARNING")
-                                    break
-                                compensation_values.append(num)
-                            except ValueError:
-                                self.log(f"无效数值格式: {val}", "WARNING")
-                                break
-                        
-                        if len(compensation_values) != 7:
-                            continue  # 跳过无效行
-                            
                         data_points.append({
                             'freq': freq,
-                            'theta': compensation_values[0],
-                            'phi': compensation_values[1],
-                            'horn_gain': compensation_values[2],
-                            'theta_corrected': compensation_values[3],
-                            'phi_corrected': compensation_values[4],
-                            'theta_corrected_vm': compensation_values[5],
-                            'phi_corrected_vm': compensation_values[6]
+                            'theta': float(cleaned_row[1]),
+                            'phi': float(cleaned_row[2]),
+                            'horn_gain': float(cleaned_row[3]),
+                            'theta_corrected': float(cleaned_row[4]),
+                            'phi_corrected': float(cleaned_row[5]),
+                            'theta_corrected_vm': float(cleaned_row[6]),
+                            'phi_corrected_vm': float(cleaned_row[7])
                         })
                     except ValueError as e:
                         self.log(f"数据行解析失败: {row} - {str(e)}", "WARNING")
