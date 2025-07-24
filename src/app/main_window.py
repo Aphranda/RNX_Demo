@@ -3,9 +3,9 @@ from PyQt5.QtCore import Qt, QMutex
 from PyQt5.QtWidgets import QMessageBox
 import sys, os
 
-# 添加项目根目录到系统路径
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, BASE_DIR)
+# # 添加项目根目录到系统路径
+# BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# sys.path.insert(0, BASE_DIR)
 
 from resources.ui.main_window_ui import MainWindowUI
 

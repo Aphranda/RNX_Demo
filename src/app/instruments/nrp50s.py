@@ -1,5 +1,4 @@
 # app/instruments/nrp50s.py
-import pyvisa
 import time
 from app.instruments.interfaces import PowerSensor
 

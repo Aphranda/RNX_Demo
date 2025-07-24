@@ -2,7 +2,17 @@ from PyQt5.QtWidgets import (
     QApplication
 )
 from PyQt5.QtCore import QDir
+
+
+# 1. 设置项目路径
+import os
 import sys
+from pathlib import Path
+
+# 将项目根目录加入系统路径
+BASE_DIR = Path(__file__).parent.parent
+sys.path.append(str(BASE_DIR))
+
 
 
 from app.core.tcp_client import TcpClient

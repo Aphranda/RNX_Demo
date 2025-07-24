@@ -1,6 +1,6 @@
 # app/services/calibration.py
 import time
-from typing import Callable, Dict, List, Optional
+from typing import Callable, List, Optional
 from dataclasses import dataclass
 from PyQt5.QtCore import QObject, pyqtSignal, QThread
 from app.core.exceptions.instrument import InstrumentCommandError

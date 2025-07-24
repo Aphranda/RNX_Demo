@@ -1,6 +1,6 @@
 # app/instruments/plasg_signal_source.py
 import pyvisa
-from typing import Optional, Dict, Tuple
+from typing import Dict
 
 from app.instruments.interfaces import SignalSource
 from app.core.exceptions.instrument import InstrumentCommandError

@@ -1,17 +1,14 @@
 # app/widgets/CalibrationPanel/Controller.py
 import pandas as pd
-from pathlib import Path
-from typing import List, Optional, Dict, Union
-from datetime import datetime
+from typing import List, Dict
 from scipy.interpolate import interp1d
 
-from PyQt5.QtCore import QObject, pyqtSignal, QThread
+from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QMessageBox, QFileDialog
 from app.controllers.CalibrationFileManager import CalibrationFileManager
 from app.utils.SignalUnitConverter import SignalUnitConverter
 from app.instruments.factory import InstrumentFactory
-from app.instruments.interfaces import SignalSource, PowerSensor
-from app.threads.CalibrationThread import CalibrationService, CalibrationPoint, CalibrationThread
+from app.threads.CalibrationThread import CalibrationService, CalibrationPoint
 from .Model import InstrumentInfo
 
 

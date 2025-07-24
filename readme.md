@@ -6,14 +6,66 @@ RNX_Demo
 ├─ 📁build
 ├─ 📁calibrations
 │  ├─ 📁archive
+│  │  ├─ 📁KA_PHI
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-10.0dBm_27.064712to40.0GHz_stepFREQLIST_20250722_084635Z.csv
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-20.0dBm_27.064712to40.0GHz_stepFREQLIST_20250722_084603Z.csv
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-30.0dBm_27.064712to40.0GHz_stepFREQLIST_20250722_084505Z.csv
+│  │  │  └─ 📄RNX_Cal_DualPol_REF_POWER0.0dBm_27.064712to40.0GHz_stepFREQLIST_20250722_084701Z.csv
+│  │  ├─ 📁KA_THETA
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-10.0dBm_27.064712to40.0GHz_stepFREQLIST_20250722_085021Z.csv
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-20.0dBm_27.064712to40.0GHz_stepFREQLIST_20250722_084946Z.csv
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-30.0dBm_27.064712to40.0GHz_stepFREQLIST_20250722_084904Z.csv
+│  │  │  └─ 📄RNX_Cal_DualPol_REF_POWER0.0dBm_27.064712to40.0GHz_stepFREQLIST_20250722_085107Z.csv
+│  │  ├─ 📁KU_PHI
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-10.0dBm_12.47576to17.545861GHz_stepFREQLIST_20250722_091122Z.csv
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-20.0dBm_12.47576to17.545861GHz_stepFREQLIST_20250722_091105Z.csv
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-30.0dBm_12.47576to17.545861GHz_stepFREQLIST_20250722_091028Z.csv
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-40.0dBm_12.47576to17.545861GHz_stepFREQLIST_20250722_091009Z.csv
+│  │  │  └─ 📄RNX_Cal_DualPol_REF_POWER-5.0dBm_12.47576to17.545861GHz_stepFREQLIST_20250722_091153Z.csv
+│  │  ├─ 📁KU_THETA
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-10.0dBm_12.47576to17.545861GHz_stepFREQLIST_20250722_090728Z.csv
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-20.0dBm_12.47576to17.545861GHz_stepFREQLIST_20250722_090711Z.csv
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-30.0dBm_12.47576to17.545861GHz_stepFREQLIST_20250722_090655Z.csv
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-40.0dBm_12.47576to17.545861GHz_stepFREQLIST_20250722_090634Z.csv
+│  │  │  └─ 📄RNX_Cal_DualPol_REF_POWER-5.0dBm_12.47576to17.545861GHz_stepFREQLIST_20250722_090803Z.csv
+│  │  ├─ 📁K_PHI
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-10.0dBm_18.042799to26.5GHz_stepFREQLIST_20250722_084102Z.csv
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-20.0dBm_18.042799to26.5GHz_stepFREQLIST_20250722_084050Z.csv
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-30.0dBm_18.042799to26.5GHz_stepFREQLIST_20250722_084029Z.csv
+│  │  │  └─ 📄RNX_Cal_DualPol_REF_POWER0.0dBm_18.042799to26.5GHz_stepFREQLIST_20250722_084120Z.csv
+│  │  ├─ 📁K_THETA
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-10.0dBm_18.042799to26.5GHz_stepFREQLIST_20250722_080548Z.csv
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-20.0dBm_18.042799to26.5GHz_stepFREQLIST_20250722_080524Z.csv
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-30.0dBm_18.042799to26.5GHz_stepFREQLIST_20250722_080456Z.csv
+│  │  │  └─ 📄RNX_Cal_DualPol_REF_POWER0.0dBm_18.042799to26.5GHz_stepFREQLIST_20250722_080607Z.csv
+│  │  ├─ 📁X_PHI
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-10.0dBm_8.0to11.941833GHz_stepFREQLIST_20250722_090011Z.csv
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-20.0dBm_8.0to11.941833GHz_stepFREQLIST_20250722_085948Z.csv
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-30.0dBm_8.0to11.941833GHz_stepFREQLIST_20250722_085902Z.csv
+│  │  │  └─ 📄RNX_Cal_DualPol_REF_POWER-40.0dBm_8.0to11.941833GHz_stepFREQLIST_20250722_085820Z.csv
+│  │  ├─ 📁X_THETA
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-10.0dBm_8.0to11.941833GHz_stepFREQLIST_20250722_090359Z.csv
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-20.0dBm_8.0to11.941833GHz_stepFREQLIST_20250722_090332Z.csv
+│  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-30.0dBm_8.0to11.941833GHz_stepFREQLIST_20250722_090304Z.csv
+│  │  │  └─ 📄RNX_Cal_DualPol_REF_POWER-40.0dBm_8.0to11.941833GHz_stepFREQLIST_20250722_090240Z.csv
+│  │  ├─ 📄RNX_Cal_THETA_RefPwr-16.81dBm_12.47576to17.545861GHz_step-FreqList_20250722_104650Z.csv
+│  │  ├─ 📄RNX_Cal_THETA_RefPwr-30.0dBm_12.47576to17.545861GHz_step-FreqList_20250722_103025Z.csv
+│  │  └─ 📄校准数据.zip
 │  └─ 📁backup
 ├─ 📁dist
 ├─ 📁docs
+│  ├─ 📄12_18GHZ.csv
+│  ├─ 📄18_26.5GHZ.csv
+│  ├─ 📄26.5_40GHZ.csv
+│  ├─ 📄8_12GHZ.csv
 │  ├─ 📄NRPxxSN_UserManual_en_25.pdf
 │  ├─ 📄RNX量子天线测试系统指令表.md
 │  ├─ 📄RNX量子天线测试系统指令表.pdf
 │  ├─ 📄RNX量子天线测试系统链路图.png
 │  ├─ 📄WD-25045 PLASG-T8G40G 信号发生器 软件编程手册(1).pdf
+│  ├─ 📄英联标准增益18-40GHz.csv
+│  ├─ 📄英联标准增益2-18GHz.csv
+│  ├─ 📄通测暗室测试频点.csv
 │  └─ 📄频率分配.png
 ├─ 📁scripts
 │  └─ 📄Doicon.py
@@ -28,10 +80,12 @@ RNX_Demo
 │  │  │  │  ├─ 📄base.py
 │  │  │  │  ├─ 📄calibration.py
 │  │  │  │  ├─ 📄instrument.py
+│  │  │  │  ├─ 📄scpi.py
 │  │  │  │  └─ 📄__init__.py
 │  │  │  ├─ 📁__pycache__
 │  │  │  ├─ 📄error_handlers.py
 │  │  │  ├─ 📄message_bus.py
+│  │  │  ├─ 📄scpi_commands.py
 │  │  │  ├─ 📄tcp_client.py
 │  │  │  └─ 📄threads.py
 │  │  ├─ 📁dialogs
@@ -79,16 +133,24 @@ RNX_Demo
 │  │  │  └─ 📄SimpleLinkDiagram.py
 │  │  ├─ 📁__pycache__
 │  │  └─ 📄main_window.py
+│  ├─ 📁build
 │  ├─ 📁debug
+│  │  ├─ 📄cal_gain.py
 │  │  ├─ 📄debug_calibration_panel.py
+│  │  ├─ 📄RNX_Cal_DualPol_8.0to40.0GHz_stepNONE_20250720_124420Z.csv
 │  │  ├─ 📄RNX_Demo_TEST.py
-│  │  └─ 📄test_mian.py
+│  │  ├─ 📄test.py
+│  │  ├─ 📄test_mian.py
+│  │  ├─ 📄英联标准增益18-40GHz.csv
+│  │  └─ 📄英联标准增益2-18GHz.csv
+│  ├─ 📁dist
 │  ├─ 📁resources
 │  │  ├─ 📁icons
 │  │  │  ├─ 📄icon_calibration.png
 │  │  │  ├─ 📄icon_export.png
 │  │  │  ├─ 📄icon_help.png
 │  │  │  ├─ 📄icon_import.png
+│  │  │  ├─ 📄icon_init.png
 │  │  │  ├─ 📄icon_plot.png
 │  │  │  ├─ 📄icon_RNX_01.ico
 │  │  │  └─ 📄icon_settings.png
@@ -98,9 +160,15 @@ RNX_Demo
 │  │  │  ├─ 📁__pycache__
 │  │  │  └─ 📄main_window_ui.py
 │  │  └─ 📄resources.qrc
+│  ├─ 📁test
+│  │  ├─ 📁__pycache__
+│  │  └─ 📄SignalUnitConverter_test.py
+│  ├─ 📁__pycache__
 │  ├─ 📄.mian.py.lock
 │  ├─ 📄mian.py
 │  └─ 📄__init__.py
 ├─ 📄.gitignore
-└─ 📄readme.md
+├─ 📄readme.md
+├─ 📄RNX_Cal_DualPol_8.0to40.0GHz_stepNONE_20250720_124420Z.csv
+└─ 📄test.csv
 ```

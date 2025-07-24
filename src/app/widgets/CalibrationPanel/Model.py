@@ -1,7 +1,6 @@
 # app/widgets/CalibrationPanel/Model.py
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
-from datetime import datetime
 from app.threads.CalibrationThread import CalibrationPoint
 from app.instruments.interfaces import SignalSource
 from app.instruments.interfaces import PowerSensor

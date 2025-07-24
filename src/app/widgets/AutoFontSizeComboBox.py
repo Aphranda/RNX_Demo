@@ -1,6 +1,5 @@
-from PyQt5.QtWidgets import QComboBox, QSizePolicy
+from PyQt5.QtWidgets import QComboBox
 from PyQt5.QtGui import QFontMetrics
-from PyQt5.QtCore import Qt
 
 class AutoFontSizeComboBox(QComboBox):
     def __init__(self, parent=None):
