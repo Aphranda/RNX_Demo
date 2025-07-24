@@ -1,12 +1,12 @@
 # app/instruments/interfaces.py
+import pyvisa as visa
 from abc import ABC, abstractmethod
 from typing import Optional
-import pyvisa
 
 class VisaInstrument(ABC):
     """所有VISA设备的基类"""
     def __init__(self, visa_address: str):
-        self.rm = pyvisa.ResourceManager()
+        self.rm = visa.ResourceManager()
         self._inst = self.rm.open_resource(visa_address)
         self._inst.timeout = 3000  # 默认3秒超时
 

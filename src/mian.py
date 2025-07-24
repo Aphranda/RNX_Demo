@@ -5,7 +5,10 @@ from PyQt5.QtCore import QDir
 
 
 # 1. 设置项目路径
-import os
+import numpy as np
+import pandas as pd
+import pyvisa as visa
+import scipy
 import sys
 from pathlib import Path
 
