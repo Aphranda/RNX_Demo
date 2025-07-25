@@ -17,7 +17,7 @@ class StatusQueryThread(QThread):
         
         # 状态更新控制标志
         self.update_motion = False
-        self.update_source = False
+        self.update_source = True
 
     def run(self):
         axes = ["X", "KU", "K", "KA", "Z"]
@@ -74,6 +74,10 @@ class StatusQueryThread(QThread):
                 self.mutex.unlock()
                 
             if status["motion"] or status["src"]:
+                # 模拟数据填充
+                # status["src"]["freq"] = "15000000000"
+                # status["src"]["raw_power"] = "-30"
+                # status["src"]["rf"] = "ON"
                 self.status_signal.emit(status)
                 
             axis_idx = (axis_idx + 1) % len(axes)

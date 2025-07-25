@@ -133,7 +133,7 @@ class StatusPanelController(QObject):
             current_power = self.model.src_status.get(unit_type, '-')
             if current_power != '-':
                 formatted = self._format_quantity(current_power, 'power', 
-                                            'src_power' if unit_type == 'power' else 'raw_power')
+                                            'raw_power' if unit_type == 'power' else 'raw_power')
                 self.model.update_src_status({unit_type: formatted})
         
         self.update_ui()
@@ -165,7 +165,7 @@ class StatusPanelController(QObject):
                     
             elif quantity_type == 'power':
                 # 获取当前单位
-                if target_widget == 'src_power':
+                if target_widget == 'raw_power':
                     current_unit = self.view.power_unit_combo.currentText()
                 else:
                     current_unit = self.view.raw_power_unit_combo.currentText()
@@ -389,7 +389,7 @@ class StatusPanelController(QObject):
                 for key, value in status.items():
                     if key == 'freq':
                         formatted_status[key] = self._format_quantity(value, 'frequency')
-                    elif key == 'power':
+                    elif key == 'raw_power':
                         # 获取当前频率
                         freq_str = status.get('freq', '0')
                         try:
@@ -397,12 +397,12 @@ class StatusPanelController(QObject):
                             # 应用补偿值
                             compensation = self.get_compensation_value(freq_ghz)
                             compensated_power = float(value) + compensation
-                            formatted_status[key] = self._format_quantity(str(compensated_power), 'power', 'src_power')
+                            formatted_status[key] = self._format_quantity(value, 'power', 'power')
                             # 同时更新原始功率
-                            formatted_status['raw_power'] = self._format_quantity(value, 'power', 'raw_power')
+                            formatted_status['power'] = self._format_quantity(str(compensated_power), 'power', 'raw_power')
                         except ValueError:
-                            formatted_status[key] = self._format_quantity(value, 'power', 'src_power')
-                    elif key == 'raw_power':
+                            formatted_status[key] = self._format_quantity(value, 'power', 'power')
+                    elif key == 'power':
                         # 原始功率不应用补偿
                         if 'power' not in formatted_status:  # 如果power还没处理过
                             formatted_status[key] = self._format_quantity(value, 'power', 'raw_power')
