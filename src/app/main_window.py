@@ -89,6 +89,18 @@ class MainWindow(MainWindowUI):
         self.show_status("系统就绪。")
         self.log("系统启动。", "INFO")
 
+    def show_calibration_panel(self):
+        """显示或隐藏校准面板"""
+        if self.calibration_panel.isVisible():
+            self.calibration_panel.hide()
+            self.calibration_action.setText("校准")  # 恢复按钮文本
+        else:
+            self.calibration_panel.show()
+            self.calibration_action.setText("关闭校准")  # 更新按钮文本
+            # 将校准面板置于前端
+            self.calibration_panel.raise_()
+            self.calibration_panel.activateWindow()
+
         # endregion
 
     

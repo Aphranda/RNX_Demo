@@ -300,6 +300,72 @@ QRadioButton::indicator:checked:disabled {
     );
 }
 
+/* ===== QProgressBar 样式 ===== */
+QProgressBar {
+    border: 2px solid #b0b0b0;
+    border-radius: 8px;
+    background: #f9f9f9;
+    text-align: center;
+    font-size: 20px;
+    font-weight: bold;
+    color: #222;
+    min-height: 30px;
+    max-height: 30px;
+}
+
+QProgressBar::chunk {
+    background: #42a5f5;
+    border-radius: 6px;
+    border: 1px solid #1976d2;
+    margin: 1px;
+}
+
+/* 进度条不同状态 */
+QProgressBar[status="normal"]::chunk {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 #42a5f5, stop:1 #64b5f6);
+}
+
+QProgressBar[status="warning"]::chunk {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 #ffa726, stop:1 #ffb74d);
+    border: 1px solid #fb8c00;
+}
+
+QProgressBar[status="error"]::chunk {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 #ef5350, stop:1 #e57373);
+    border: 1px solid #e53935;
+}
+
+QProgressBar[status="success"]::chunk {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 #66bb6a, stop:1 #81c784);
+    border: 1px solid #43a047;
+}
+
+/* 禁用状态 */
+QProgressBar:disabled {
+    color: #a0a0a0;
+}
+
+QProgressBar:disabled::chunk {
+    background: #b0b0b0;
+    border: 1px solid #a0a0a0;
+}
+
+/* 日志窗口中的进度条样式 */
+LogWidget QProgressBar {
+    font-size: 14px;
+    min-height: 20px;
+    max-height: 20px;
+}
+
+LogWidget QProgressBar::chunk {
+    margin: 0.5px;
+}
+
+
 /* LogWidget中的特殊样式 */
 LogWidget QRadioButton {
     font-size: 16px;
