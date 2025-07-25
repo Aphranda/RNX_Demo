@@ -37,6 +37,7 @@ class MainWindow(MainWindowUI):
         # 初始化控制器
         self._init_controller()
     
+    # region 初始化方法
     def _init_status_cache(self):
         """初始化状态缓存"""
         self.status_cache = {
@@ -53,8 +54,6 @@ class MainWindow(MainWindowUI):
     def _init_controller(self):
         """初始化控制器逻辑"""
         # 连接信号与槽
-
-
         self.eth_connect_btn.clicked.connect(self.connect_eth)
         self.eth_disconnect_btn.clicked.connect(self.disconnect_eth)
 
@@ -84,12 +83,15 @@ class MainWindow(MainWindowUI):
         #工具栏校准按钮
         self.calibration_action.triggered.connect(self.show_calibration_panel)
 
- 
+        
         
         # 状态栏初始信息
         self.show_status("系统就绪。")
         self.log("系统启动。", "INFO")
 
+        # endregion
+
+    
     # --- 标准SCPI ---
     def _handle_scpi_response(self, cmd: str, result: str):
         """处理SCPI命令执行结果"""
@@ -117,9 +119,7 @@ class MainWindow(MainWindowUI):
         }
         return link_mapping.get(response.strip(), "FEED_X_THETA")  # 默认返回X_THETA
     
-
-
-    # ==== 网络连接方法 ====
+    # region 网络连接方法
     def connect_eth(self):
         ip = self.eth_ip_input.text().strip() or self.eth_ip_input.placeholderText()
         port = self.eth_port_input.text().strip() or self.eth_port_input.placeholderText()
@@ -151,6 +151,19 @@ class MainWindow(MainWindowUI):
             self.show_status("未连接到设备。")
             self.log("未连接到设备。", "WARNING")
 
+    def _update_connection_ui(self, connected):
+        """更新连接状态的UI"""
+        if connected:
+            self.eth_ip_input.setStyleSheet("border: 2px solid #4CAF50;")
+            self.eth_port_input.setStyleSheet("border: 2px solid #4CAF50;")
+            self.eth_connect_btn.setStyleSheet("background: #4CAF50; color: white;")
+        else:
+            self.eth_ip_input.setStyleSheet("")
+            self.eth_port_input.setStyleSheet("")
+            self.eth_connect_btn.setStyleSheet("")
+    # endregion
+
+    # region 系统初始化方法
     def system_initialize(self):
         """执行系统初始化操作"""
         if not self.tcp_client.connected:
@@ -188,6 +201,7 @@ class MainWindow(MainWindowUI):
             self.show_status(f"初始化失败: {str(e)}")
             self.update_init_button_style("error")
             self.init_btn.setEnabled(True)
+    
 
     def _handle_operation_completed(self, axis, success):
         """处理操作完成信号"""
@@ -223,8 +237,9 @@ class MainWindow(MainWindowUI):
         # 强制重新加载样式
         self.init_btn.style().unpolish(self.init_btn)
         self.init_btn.style().polish(self.init_btn)
+    # endregion
 
-
+    # region 线程操作方法
     def _start_status_thread(self, ip, port):
         """启动状态查询线程"""
         if self.status_thread:
@@ -249,18 +264,35 @@ class MainWindow(MainWindowUI):
         if self.status_thread and self.status_thread.isRunning():
             self.status_thread.resume()
 
-    def _update_connection_ui(self, connected):
-        """更新连接状态的UI"""
-        if connected:
-            self.eth_ip_input.setStyleSheet("border: 2px solid #4CAF50;")
-            self.eth_port_input.setStyleSheet("border: 2px solid #4CAF50;")
-            self.eth_connect_btn.setStyleSheet("background: #4CAF50; color: white;")
-        else:
-            self.eth_ip_input.setStyleSheet("")
-            self.eth_port_input.setStyleSheet("")
-            self.eth_connect_btn.setStyleSheet("")
+    def update_status_panel(self, status):
+        """Main method to update the status panel"""
+        self._update_status_cache(status)
+        # 委托给StatusPanel处理更新逻辑
+        self.status_panel._controller.update_motion_status(status.get("motion", {}))
+        self.status_panel._controller.update_src_status(status.get("src", {}))
+        self.status_panel._controller.update_operation_status(status.get("motion", {}))
 
-    # ==== 频率联动方法 ====
+    def _update_status_cache(self, status):
+        """Update the internal status cache"""
+        # Update motion status
+        axes = ["X", "KU", "K", "KA", "Z"]
+        for axis in axes:
+            if axis in status.get("motion", {}):
+                for key in ["reach", "home", "speed"]:
+                    val = status["motion"][axis].get(key)
+                    if val is not None:
+                        self.status_cache["motion"][axis][key] = val
+        
+        # Update source status
+        for key in ["freq", "power", "rf"]:
+            val = status.get("src", {}).get(key)
+            if val is not None:
+                self.status_cache["src"][key] = val
+    # endregion
+
+
+
+    # region 频率联动方法
     def _on_freq_link_state_changed(self, state):
         """处理频率联动复选框状态变化"""
         if state == Qt.Checked and not self._is_freq_link_connected:
@@ -294,6 +326,83 @@ class MainWindow(MainWindowUI):
             target_axis = mode.split("_")[1]
             self.status_panel._controller.request_feed(target_axis)
 
+    def _control_feed_for_frequency(self, freq_str):
+        """根据频率控制对应的馈源轴"""
+        try:
+            # 解析频率值
+            freq_ghz = float(freq_str.replace("GHz", "").strip())
+            
+            # 确定目标馈源轴
+            target_axis = self._determine_feed_axis(freq_ghz)
+            if not target_axis:
+                return
+                
+            # 获取当前链路模式
+            current_link = self.parse_link_response(self.status_cache.get("src", {}).get("link", ""))
+            
+            # 构建新的链路模式
+            if target_axis == "X":
+                new_link = "FEED_X_THETA" if "THETA" in current_link else "FEED_X_PHI"
+            elif target_axis == "KU":
+                new_link = "FEED_KU_THETA" if "THETA" in current_link else "FEED_KU_PHI"
+            elif target_axis == "K":
+                new_link = "FEED_K_THETA" if "THETA" in current_link else "FEED_K_PHI"
+            elif target_axis == "KA":
+                new_link = "FEED_KA_THETA" if "THETA" in current_link else "FEED_KA_PHI"
+            else:
+                return
+                
+            # 更新当前馈源模式
+            self.current_feed_mode = new_link
+            
+            # 使用状态机控制器请求达位
+            self.status_panel._controller.request_feed(target_axis)
+            
+            # 发送链路切换命令
+            self._send_link_command(new_link)
+            
+        except ValueError:
+            self.log("无效的频率格式", "ERROR")
+
+    def _determine_feed_axis(self, freq_ghz):
+        """根据频率确定目标馈源轴"""
+        freq_ranges = {
+            "X": (8.0, 12.0),
+            "KU": (12.0, 18.0),
+            "K": (18.0, 26.5),
+            "KA": (26.5, 40.0)
+        }
+        
+        for axis, (min_freq, max_freq) in freq_ranges.items():
+            if min_freq <= freq_ghz <= max_freq:
+                return axis
+        return None
+
+    def _send_link_command(self, link_mode):
+        """发送链路配置命令"""
+        cmd = f"CONFigure:LINK {link_mode}"
+        self.link_diagram.set_link(link_mode)  # 动态刷新链路图
+        
+        # 发送命令
+        self.send_and_log(cmd)
+        
+        # 更新频率显示
+        min_freq, max_freq = {
+            "FEED_X_THETA": (8.0, 12.0),
+            "FEED_X_PHI": (8.0, 12.0),
+            "FEED_KU_THETA": (12.0, 18.0),
+            "FEED_KU_PHI": (12.0, 18.0),
+            "FEED_K_THETA": (18.0, 26.5),
+            "FEED_K_PHI": (18.0, 26.5),
+            "FEED_KA_THETA": (26.5, 40.0),
+            "FEED_KA_PHI": (26.5, 40.0)
+        }.get(link_mode, (8.0, 12.0))
+        
+        center_freq = (min_freq + max_freq) / 2
+        self.freq_input.setText(f"{center_freq:.3f}GHz")
+        self.log(f"频率联动: 自动设置为{center_freq}GHz ({link_mode})", "INFO")
+
+    # endregion
 
     def is_valid_frequency(self, freq_str):
         """验证频率值是否有效"""
@@ -337,6 +446,10 @@ class MainWindow(MainWindowUI):
         except ValueError:
             return False
 
+
+
+
+    # region 功率输入处理
     def on_power_input_changed(self, text):
         """补偿后功率输入框变化时的处理"""
         # 防止递归触发
@@ -473,7 +586,10 @@ class MainWindow(MainWindowUI):
         except ValueError as e:
             self.log(f"原始功率转换错误: {str(e)}", "WARNING")
 
+    # endregion
 
+    # region 校准及补偿方法
+    
     def load_calibration_file(self, filepath: str):
         """加载校准文件"""
         from PyQt5.QtWidgets import QFileDialog
@@ -597,7 +713,7 @@ class MainWindow(MainWindowUI):
                 self.log("数据点数匹配", "SUCCESS")
             else:
                 self.log("数据点数不匹配", "WARNING")
-        
+
     def get_compensation_value(self, freq_ghz: float) -> float:
         """
         根据频率获取补偿值，已考虑参考功率(ref_power)
@@ -636,11 +752,9 @@ class MainWindow(MainWindowUI):
         else:
             self.log("未知链路模式，使用默认补偿值0dB", "WARNING")
             return 0.0
+    # endregion
 
-
-
-
-
+    # region 链路控制方法
     # --- 指令组合与发送 ---
     # --- 链路切换，并且移动馈源位置。
     def send_link_cmd(self):
@@ -685,7 +799,9 @@ class MainWindow(MainWindowUI):
             # 恢复状态线程
             self.resume_status_thread()
 
+    # endregion
 
+    # region 信号源控制方法
     def send_freq_cmd(self):
         val = self.freq_input.text().strip() + " " + self.freq_unit_combo.currentText()
         if not val:
@@ -710,90 +826,10 @@ class MainWindow(MainWindowUI):
         if self._is_freq_link_connected:
             self._control_feed_for_frequency(f"{freq_ghz}GHz")
 
-
-    def _control_feed_for_frequency(self, freq_str):
-        """根据频率控制对应的馈源轴"""
-        try:
-            # 解析频率值
-            freq_ghz = float(freq_str.replace("GHz", "").strip())
-            
-            # 确定目标馈源轴
-            target_axis = self._determine_feed_axis(freq_ghz)
-            if not target_axis:
-                return
-                
-            # 获取当前链路模式
-            current_link = self.parse_link_response(self.status_cache.get("src", {}).get("link", ""))
-            
-            # 构建新的链路模式
-            if target_axis == "X":
-                new_link = "FEED_X_THETA" if "THETA" in current_link else "FEED_X_PHI"
-            elif target_axis == "KU":
-                new_link = "FEED_KU_THETA" if "THETA" in current_link else "FEED_KU_PHI"
-            elif target_axis == "K":
-                new_link = "FEED_K_THETA" if "THETA" in current_link else "FEED_K_PHI"
-            elif target_axis == "KA":
-                new_link = "FEED_KA_THETA" if "THETA" in current_link else "FEED_KA_PHI"
-            else:
-                return
-                
-            # 更新当前馈源模式
-            self.current_feed_mode = new_link
-            
-            # 使用状态机控制器请求达位
-            self.status_panel._controller.request_feed(target_axis)
-            
-            # 发送链路切换命令
-            self._send_link_command(new_link)
-            
-        except ValueError:
-            self.log("无效的频率格式", "ERROR")
-
-    def _send_link_command(self, link_mode):
-        """发送链路配置命令"""
-        cmd = f"CONFigure:LINK {link_mode}"
-        self.link_diagram.set_link(link_mode)  # 动态刷新链路图
-        
-        # 发送命令
-        self.send_and_log(cmd)
-        
-        # 更新频率显示
-        min_freq, max_freq = {
-            "FEED_X_THETA": (8.0, 12.0),
-            "FEED_X_PHI": (8.0, 12.0),
-            "FEED_KU_THETA": (12.0, 18.0),
-            "FEED_KU_PHI": (12.0, 18.0),
-            "FEED_K_THETA": (18.0, 26.5),
-            "FEED_K_PHI": (18.0, 26.5),
-            "FEED_KA_THETA": (26.5, 40.0),
-            "FEED_KA_PHI": (26.5, 40.0)
-        }.get(link_mode, (8.0, 12.0))
-        
-        center_freq = (min_freq + max_freq) / 2
-        self.freq_input.setText(f"{center_freq:.3f}GHz")
-        self.log(f"频率联动: 自动设置为{center_freq}GHz ({link_mode})", "INFO")
-
-
-
-    def _determine_feed_axis(self, freq_ghz):
-        """根据频率确定目标馈源轴"""
-        freq_ranges = {
-            "X": (8.0, 12.0),
-            "KU": (12.0, 18.0),
-            "K": (18.0, 26.5),
-            "KA": (26.5, 40.0)
-        }
-        
-        for axis, (min_freq, max_freq) in freq_ranges.items():
-            if min_freq <= freq_ghz <= max_freq:
-                return axis
-        return None
-
-
     def query_freq_cmd(self):
         cmd = "READ:SOURce:FREQuency?"
         self.send_and_log(cmd)
-
+    
     def send_power_cmd(self):
         val = self.power_input.text().strip() + " " + self.power_unit_combo.currentText()
         
@@ -859,9 +895,6 @@ class MainWindow(MainWindowUI):
             self.show_status(f"功率转换错误: {str(e)}")
             self.log(f"功率转换错误: {str(e)}", "ERROR")
 
-
-
-
     def query_power_cmd(self):
         cmd = "READ:SOURce:POWer?"
         target_unit = self.power_unit_combo.currentText()
@@ -923,7 +956,6 @@ class MainWindow(MainWindowUI):
             # 恢复状态线程
             self.resume_status_thread()
 
-
     def send_output_cmd(self):
         val = self.output_combo.currentText()
         cmd = f"SOURce:OUTPut {val}"
@@ -933,14 +965,10 @@ class MainWindow(MainWindowUI):
         cmd = "READ:SOURce:OUTPut?"
         self.send_and_log(cmd)
 
+    # endregion
+
+    # region 运动控制方法
     def send_home_cmd(self):
-        # val = self.home_combo.currentText()
-        # cmd = f"MOTion:HOME {val}"
-        # # 设置操作状态
-        # if self.status_thread:
-        #     self.status_panel._controller.current_operation = "HOMING"
-        #     self.status_panel._controller.operating_axis = val
-        # self.send_and_log(cmd)
         val = self.home_combo.currentText()
         # 使用状态机控制器请求复位
         self.status_panel._controller.request_home(val)
@@ -951,13 +979,6 @@ class MainWindow(MainWindowUI):
         self.send_and_log(cmd)
 
     def send_feed_cmd(self):
-        # val = self.feed_combo.currentText()
-        # cmd = f"MOTion:FEED {val}"
-        # # 设置操作状态
-        # if self.status_thread:
-        #     self.status_panel._controller.current_operation = "FEEDING"
-        #     self.status_panel._controller.operating_axis = val
-        # self.send_and_log(cmd)
         val = self.feed_combo.currentText()
         # 使用状态机控制器请求达位
         self.status_panel._controller.request_feed(val)
@@ -1000,6 +1021,9 @@ class MainWindow(MainWindowUI):
             # 手动指令完成后重启状态线程
             self.resume_status_thread()
 
+    # endregion
+
+    # region 通用方法
     def send_and_log(self, cmd):
         # 优先暂停状态线程，防止抢占
         self.pause_status_thread()
@@ -1037,44 +1061,6 @@ class MainWindow(MainWindowUI):
     def show_status(self, message, timeout=0):
         self.status_bar.showMessage(message, timeout)
 
-    def update_status_panel(self, status):
-        """Main method to update the status panel"""
-        self._update_status_cache(status)
-        # 委托给StatusPanel处理更新逻辑
-        self.status_panel._controller.update_motion_status(status.get("motion", {}))
-        self.status_panel._controller.update_src_status(status.get("src", {}))
-        self.status_panel._controller.update_operation_status(status.get("motion", {}))
-
-    def _update_status_cache(self, status):
-        """Update the internal status cache"""
-        # Update motion status
-        axes = ["X", "KU", "K", "KA", "Z"]
-        for axis in axes:
-            if axis in status.get("motion", {}):
-                for key in ["reach", "home", "speed"]:
-                    val = status["motion"][axis].get(key)
-                    if val is not None:
-                        self.status_cache["motion"][axis][key] = val
-        
-        # Update source status
-        for key in ["freq", "power", "rf"]:
-            val = status.get("src", {}).get(key)
-            if val is not None:
-                self.status_cache["src"][key] = val
-
-
-    def show_calibration_panel(self):
-        """显示或隐藏校准面板"""
-        if self.calibration_panel.isVisible():
-            self.calibration_panel.hide()
-            self.calibration_action.setText("校准")  # 恢复按钮文本
-        else:
-            self.calibration_panel.show()
-            self.calibration_action.setText("关闭校准")  # 更新按钮文本
-            # 将校准面板置于前端
-            self.calibration_panel.raise_()
-            self.calibration_panel.activateWindow()
-
     def closeEvent(self, event):
         """重写关闭事件，确保安全关闭线程"""
         # 停止状态查询线程
@@ -1105,3 +1091,4 @@ class MainWindow(MainWindowUI):
         else:
             event.ignore()
 
+    # endregion
