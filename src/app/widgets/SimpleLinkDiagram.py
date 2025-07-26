@@ -11,6 +11,9 @@ class SimpleLinkDiagram(QLabel):
         self.current_link = "FEED_X_THETA"
         self.setStyleSheet("background: transparent;")
 
+        # 新增：声明不透明绘制
+        self.setAttribute(Qt.WA_OpaquePaintEvent)
+
     def set_link(self, link_mode):
         normalized_link = link_mode.upper().replace("__", "_")
         self.current_link = normalized_link
@@ -29,7 +32,6 @@ class SimpleLinkDiagram(QLabel):
         highlight_color = QColor("#ea4335")
         highlight_text = QColor("#ea4335")
         
- 
         # 字体设置
         font = QFont("Segoe UI", 10, QFont.Medium)
         painter.setFont(font)
@@ -71,13 +73,13 @@ class SimpleLinkDiagram(QLabel):
         for i, (name, link_key) in enumerate(node_list):
             ny = start_y + i * (node_h + gap_y)
             
-            # 连线样式
+            # 1. 先绘制连线（此时不设置任何画刷）
             line_pen = QPen(highlight_color if self.current_link == link_key else line_color, 
-                           3 if self.current_link == link_key else 2)
+                        3 if self.current_link == link_key else 2)
             line_pen.setCapStyle(Qt.RoundCap)
             painter.setPen(line_pen)
+            painter.setBrush(Qt.NoBrush)  # 明确禁用画刷
             
-            # 绘制平滑贝塞尔曲线
             path = QPainterPath()
             path.moveTo(com_cx + node_w//2, com_cy)
             ctrl1_x = com_cx + 50
@@ -88,8 +90,8 @@ class SimpleLinkDiagram(QLabel):
                 QPointF(node_x - node_w//2, ny + node_h//2)
             )
             painter.drawPath(path)
-
-            # 节点
+    
+            # 2. 再绘制节点（此时才设置渐变画刷）
             if self.current_link == link_key:
                 grad = QLinearGradient(node_x - node_w//2, ny, node_x + node_w//2, ny + node_h)
                 grad.setColorAt(0, QColor("#ffffff"))
@@ -102,12 +104,14 @@ class SimpleLinkDiagram(QLabel):
                 grad.setColorAt(1, QColor("#f1f3f4"))
                 painter.setPen(QPen(node_border, 1))
                 painter.setBrush(grad)
+            
             painter.drawEllipse(QRectF(node_x - node_w//2, ny, node_w, node_h))
-
-            # 节点文字
+    
+            # 3. 最后绘制文字（重置画刷）
             text_pen = QPen(highlight_text if self.current_link == link_key else node_text, 1)
             painter.setPen(text_pen)
+            painter.setBrush(Qt.NoBrush)  # 文字不需要画刷
             painter.drawText(node_x + node_w//2 + 6, ny, 80, node_h, 
-                           Qt.AlignVCenter | Qt.AlignLeft, name)
-
+                        Qt.AlignVCenter | Qt.AlignLeft, name)
+    
         painter.end()
