@@ -1,14 +1,14 @@
 from PyQt5.QtWidgets import QLabel
 from PyQt5.QtGui import (QColor, QPainter, QPen, QFont, 
-                         QLinearGradient, QPainterPath, QBrush)
-from PyQt5.QtCore import Qt, QPointF, QRectF, QTimer
+                         QLinearGradient, QPainterPath, QBrush, QPolygonF)
+from PyQt5.QtCore import Qt, QPointF, QRectF, QTimer, QPoint
 import math
-
+ 
 class SimpleLinkDiagram(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumHeight(450)  # 增加高度以容纳信号源和标签
-        self.setMinimumWidth(500)
+        self.setMinimumHeight(450)
+        self.setMinimumWidth(480)
         self.current_link = "FEED_X_THETA"
         self.setStyleSheet("background: transparent;")
         self.setAttribute(Qt.WA_OpaquePaintEvent)
@@ -28,7 +28,7 @@ class SimpleLinkDiagram(QLabel):
         normalized_link = link_mode.upper().replace("__", "_")
         self.current_link = normalized_link
         self.update()
-
+ 
     def paintEvent(self, a0):
         super().paintEvent(a0)
         painter = QPainter(self)
@@ -42,18 +42,19 @@ class SimpleLinkDiagram(QLabel):
         highlight_text = QColor("#ea4335")
         energy_color = QColor(255, 215, 0, 200)
         signal_source_color = QColor("#4285F4")
+        antenna_color = QColor("#5F6368")  # 天线颜色
         
         # 字体设置
         font = QFont("Segoe UI", 10, QFont.Medium)
         painter.setFont(font)
-
+ 
         # 布局参数
-        start_x = 120  # 向右移动给标签留空间
+        start_x = 120
         start_y = 20
-        node_w = 40
-        node_h = 24
+        antenna_w = 40  # 保持与原来节点相同宽度
+        antenna_h = 24  # 保持与原来节点相同高度
         gap_y = 35
-
+ 
         # 节点定义
         node_list = [
             ("X_THETA", "FEED_X_THETA"),
@@ -65,10 +66,10 @@ class SimpleLinkDiagram(QLabel):
             ("KA_THETA", "FEED_KA_THETA"),
             ("KA_PHI", "FEED_KA_PHI"),
         ]
-
+ 
         # COM节点位置
         com_cx = start_x
-        com_cy = start_y + (len(node_list) * (node_h + gap_y) - gap_y) // 2
+        com_cy = start_y + (len(node_list) * (antenna_h + gap_y) - gap_y) // 2
 
         # ==================== 绘制信号源样式 ====================
         # 1. 信号源尺寸参数
@@ -120,12 +121,12 @@ class SimpleLinkDiagram(QLabel):
         painter.setPen(QPen(QColor("#0F1018"), 1))
         painter.drawText(label_rect, Qt.AlignVCenter | Qt.AlignRight, "SOURCE")  # 完整标签
 
-        # ==================== 绘制节点和连线 ====================
-        node_x = com_cx + 200  # 调整节点X位置
+        # ==================== 绘制天线节点和连线 ====================
+        antenna_x = com_cx + 200  # 调整天线X位置
         for i, (name, link_key) in enumerate(node_list):
-            ny = start_y + i * (node_h + gap_y)
+            ny = start_y + i * (antenna_h + gap_y)
             
-            # 绘制连线(保持不变)
+            # 1. 绘制连线(保持不变)
             is_active = self.current_link == link_key
             line_pen = QPen(highlight_color if is_active else line_color, 
                         4 if is_active else 2.5)
@@ -138,13 +139,13 @@ class SimpleLinkDiagram(QLabel):
             
             ctrl1_x = com_cx + 90
             ctrl1_y = com_cy
-            ctrl2_x = node_x - 90
-            ctrl2_y = ny + node_h//2
+            ctrl2_x = antenna_x - 90
+            ctrl2_y = ny + antenna_h//2
             
             path.cubicTo(
                 QPointF(ctrl1_x, ctrl1_y),
                 QPointF(ctrl2_x, ctrl2_y),
-                QPointF(node_x - node_w//2, ny + node_h//2)
+                QPointF(antenna_x - antenna_w//2, ny + antenna_h//2)
             )
             painter.drawPath(path)
             
@@ -154,7 +155,7 @@ class SimpleLinkDiagram(QLabel):
                 p0 = QPointF(com_cx + signal_w//2, com_cy)
                 p1 = QPointF(ctrl1_x, ctrl1_y)
                 p2 = QPointF(ctrl2_x, ctrl2_y)
-                p3 = QPointF(node_x - node_w//2, ny + node_h//2)
+                p3 = QPointF(antenna_x - antenna_w//2, ny + antenna_h//2)
                 
                 energy_point = self.cubic_bezier(p0, p1, p2, p3, t)
                 
@@ -172,28 +173,67 @@ class SimpleLinkDiagram(QLabel):
                         painter.setBrush(QBrush(QColor(255, 215, 0, alpha)))
                         painter.drawEllipse(tail_point, size, size)
             
-            # 绘制节点(保持不变)
+            # 2. 绘制喇叭天线(修正方向，喇叭口朝左)
+            antenna_left = antenna_x - antenna_w//2
+            antenna_top = ny
+
+            # 喇叭天线参数
+            horn_width = antenna_w
+            horn_height = antenna_h
+            flare_angle = 15  # 喇叭张角(度)
+            flare_length = horn_width * 0.6  # 喇叭部分长度
+
+            # 创建喇叭天线路径(修正方向)
+            horn_path = QPainterPath()
+
+            # 右侧矩形部分(波导部分) - 现在在右侧
+            waveguide_width = horn_width - flare_length
+            waveguide_left = antenna_left + flare_length  # 波导部分向右移动
+
+            # 左侧喇叭部分(开口朝左)
+            flare_top = antenna_top + (horn_height/2 - (flare_length * math.tan(math.radians(flare_angle))/2))
+            flare_bottom = antenna_top + horn_height - (horn_height/2 - (flare_length * math.tan(math.radians(flare_angle))/2))
+
+            # 绘制路径(从左上角开始顺时针)
+            horn_path.moveTo(antenna_left, flare_top)  # 喇叭口左上角
+            horn_path.lineTo(antenna_left + flare_length, antenna_top)  # 到波导左上角
+            horn_path.lineTo(antenna_left + horn_width, antenna_top)  # 到波导右上角
+            horn_path.lineTo(antenna_left + horn_width, antenna_top + horn_height)  # 到波导右下角
+            horn_path.lineTo(antenna_left + flare_length, antenna_top + horn_height)  # 到波导左下角
+            horn_path.lineTo(antenna_left, flare_bottom)  # 到喇叭口右下角
+            horn_path.closeSubpath()  # 闭合路径
+
+            # 填充天线(保持不变)
             if is_active:
-                grad = QLinearGradient(node_x - node_w//2, ny, node_x + node_w//2, ny + node_h)
-                grad.setColorAt(0, QColor("#ffffff"))
-                grad.setColorAt(1, QColor("#f1f3f4"))
-                painter.setPen(QPen(highlight_color, 2))
-                painter.setBrush(grad)
+                grad = QLinearGradient(antenna_left, antenna_top, 
+                                    antenna_left + horn_width, antenna_top + horn_height)
+                grad.setColorAt(0, QColor("#f1f3f4"))
+                grad.setColorAt(1, QColor("#e0e2e4"))
+                painter.setPen(QPen(highlight_color, 1.5))
             else:
-                grad = QLinearGradient(node_x - node_w//2, ny, node_x + node_w//2, ny + node_h)
-                grad.setColorAt(0, QColor("#ffffff"))
-                grad.setColorAt(1, QColor("#f1f3f4"))
-                painter.setPen(QPen(node_border, 1))
-                painter.setBrush(grad)
+                grad = QLinearGradient(antenna_left, antenna_top, 
+                                    antenna_left + horn_width, antenna_top + horn_height)
+                grad.setColorAt(0, QColor("#f8f9fa"))
+                grad.setColorAt(1, QColor("#e8eaed"))
+                painter.setPen(QPen(antenna_color, 1))
+
+            painter.setBrush(grad)
+            painter.drawPath(horn_path)
+
+            # 3. 绘制天线内部细节(波导指示线) - 调整到波导部分中心
+            painter.setPen(QPen(antenna_color.darker(120), 0.8))
+            guide_line_y = antenna_top + horn_height/2
+            painter.drawLine(QPointF(waveguide_left + 2, guide_line_y),
+                            QPointF(antenna_left + horn_width - 2, guide_line_y))
+
             
-            painter.drawEllipse(QRectF(node_x - node_w//2, ny, node_w, node_h))
-    
-            # 绘制文字(保持不变)
+            # 4. 绘制文字标签(向右移动一点)
             text_pen = QPen(highlight_text if is_active else node_text, 1)
             painter.setPen(text_pen)
             painter.setBrush(Qt.NoBrush)
-            painter.drawText(node_x + node_w//2 + 6, ny, 80, node_h, 
-                        Qt.AlignVCenter | Qt.AlignLeft, name)
+            painter.drawText(antenna_x + horn_width//2 + 8,  # 增加间距
+                           ny, 80, horn_height, 
+                           Qt.AlignVCenter | Qt.AlignLeft, name)
     
         painter.end()
     
