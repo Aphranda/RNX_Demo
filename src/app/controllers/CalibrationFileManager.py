@@ -160,11 +160,11 @@ class CalibrationFileManager:
         # 创建新校准文件
         # 构造基础参数
         base_param = {
-            'ref_power': default_meta['ref_power']['X'] if isinstance(default_meta['ref_power'], dict) else -20.0,
-            'polarization': 'DUAL',
+            'ref_power': default_meta['ref_power']['X'] if isinstance(default_meta['ref_power'], dict) else -15.0,
+            'polarization': 'Phi',
             'distance': 1.0
         }
-        filepath = self.create_new_calibration(
+        self.create_new_calibration(
             equipment_meta=default_meta,
             freq_params=freq_params,
             base_param=base_param,
@@ -191,11 +191,12 @@ class CalibrationFileManager:
                 if i == points - 1:
                     freq = stop_ghz
                     
+                default_gain = 10
                 zero_data = {
-                    'theta': 0.0, 'phi': 0.0,
-                    'horn_gain': 0.0,
-                    'theta_corrected': 0.0, 'phi_corrected': 0.0,
-                    'theta_corrected_vm': 0.0, 'phi_corrected_vm': 0.0
+                    'theta': default_gain, 'phi': default_gain,
+                    'horn_gain': default_gain,
+                    'theta_corrected': default_gain, 'phi_corrected': default_gain,
+                    'theta_corrected_vm': default_gain, 'phi_corrected_vm': default_gain
                 }
                 self.add_data_point(round(freq, 6), zero_data)  # 保留6位小数避免浮点误差
         
@@ -231,7 +232,7 @@ class CalibrationFileManager:
             points = int((freq_params['stop_ghz'] - freq_params['start_ghz']) / freq_params['step_ghz']) + 1
 
         # 生成文件名
-        step_str = "NONE" if freq_params.get("step_ghz") == "FreqList" else f"{freq_params['step_ghz']}"
+        step_str = "FreqList" if freq_params.get("step_ghz") == "FreqList" else f"{freq_params['step_ghz']}"
         filename = (
             f"RNX_Cal_{polarization}_"
             f"RefPwr{ref_power}dBm_"
@@ -287,6 +288,214 @@ class CalibrationFileManager:
         self.log(f"创建新校准文件: {filename}", "INFO")
         return self.active_file
 
+    def merge_calibration_files(self, file_paths: List[str], output_filename: Optional[str] = None) -> str:
+        """
+        合并多个校准文件为一个综合校准文件，支持数据去重和极化合并
+        
+        :param file_paths: 要合并的校准文件路径列表
+        :param output_filename: 输出文件名(可选)，如果为None则自动生成
+        :return: 合并后的文件路径
+        
+        合并规则:
+        1. 相同频率和参考功率的数据点:
+        - 如果极化相同且所有数据相同，则去重
+        - 如果极化不同，则合并为双极化数据
+        2. 不同频率或参考功率的数据点全部保留
+        """
+        if not file_paths:
+            raise ValueError("至少需要一个校准文件")
+        
+        # 加载所有文件数据
+        all_data = []
+        all_meta = []
+        for filepath in file_paths:
+            file_data = self.load_calibration_file(filepath)
+            if file_data is None:
+                self.log(f"无法加载文件: {filepath}", "WARNING")
+                continue
+            
+            all_meta.append(file_data['meta'])
+            for point in file_data['data']:
+                # 确保每个数据点包含参考功率和极化信息
+                if 'reference_power' not in point:
+                    ref_power = file_data['meta']['base_param'].get('ref_power', 0.0)
+                    if isinstance(ref_power, list):
+                        if len(ref_power) > 0:
+                            point['reference_power'] = ref_power[0]  # 取第一个值
+                        else:
+                            point['reference_power'] = 0.0  # 默认值
+                    else:
+                        point['reference_power'] = float(ref_power)  # 确保是float
+                
+                if 'polarization' not in point:
+                    point['polarization'] = file_data['meta']['base_param'].get('polarization', 'DUAL')
+                
+                all_data.append(point)
+        
+        if not all_data:
+            raise ValueError("没有有效数据可以合并")
+        
+        # 数据合并处理
+        merged_data = {}
+        for point in all_data:
+            freq = round(point['freq'], 6)  # 频率作为键的一部分，保留6位小数
+            ref_power = round(point['reference_power'], 2)  # 参考功率作为键的一部分
+            key = (freq, ref_power)
+            
+            if key not in merged_data:
+                # 新数据点
+                merged_data[key] = {
+                    'theta': None,
+                    'phi': None,
+                    'horn_gain': point.get('horn_gain', 0.0),
+                    'theta_corrected': None,
+                    'phi_corrected': None,
+                    'theta_corrected_vm': None,
+                    'phi_corrected_vm': None,
+                    'polarizations': set(),
+                    'source_points': []
+                }
+            
+            # 记录极化信息
+            merged_data[key]['polarizations'].add(point['polarization'].upper())
+            merged_data[key]['source_points'].append(point)
+            
+            # 根据极化类型填充数据
+            pol = point['polarization'].upper()
+            if pol == 'THETA':
+                merged_data[key]['theta'] = point.get('theta', 0.0)
+                merged_data[key]['theta_corrected'] = point.get('theta_corrected', 0.0)
+                merged_data[key]['theta_corrected_vm'] = point.get('theta_corrected_vm', 0.0)
+            elif pol == 'PHI':
+                merged_data[key]['phi'] = point.get('phi', 0.0)
+                merged_data[key]['phi_corrected'] = point.get('phi_corrected', 0.0)
+                merged_data[key]['phi_corrected_vm'] = point.get('phi_corrected_vm', 0.0)
+            elif pol == 'DUAL':
+                # 如果是双极化数据，直接覆盖
+                merged_data[key]['theta'] = point.get('theta', 0.0)
+                merged_data[key]['phi'] = point.get('phi', 0.0)
+                merged_data[key]['theta_corrected'] = point.get('theta_corrected', 0.0)
+                merged_data[key]['phi_corrected'] = point.get('phi_corrected', 0.0)
+                merged_data[key]['theta_corrected_vm'] = point.get('theta_corrected_vm', 0.0)
+                merged_data[key]['phi_corrected_vm'] = point.get('phi_corrected_vm', 0.0)
+        
+        # 准备最终合并后的数据点
+        final_data = []
+        for key, data in merged_data.items():
+            freq, ref_power = key
+            
+            # 检查是否有完整的双极化数据
+            if data['theta'] is not None and data['phi'] is not None:
+                # 已有完整双极化数据
+                polarization = 'DUAL'
+            elif len(data['polarizations']) == 2:
+                # 合并两个单极化数据为双极化
+                polarization = 'DUAL'
+                
+                # 如果某个极化数据缺失，保持原值或设为0
+                if data['theta'] is None:
+                    data['theta'] = 0.0
+                    data['theta_corrected'] = 0.0
+                    data['theta_corrected_vm'] = 0.0
+                
+                if data['phi'] is None:
+                    data['phi'] = 0.0
+                    data['phi_corrected'] = 0.0
+                    data['phi_corrected_vm'] = 0.0
+            else:
+                # 保持单极化
+                polarization = data['polarizations'].pop() if data['polarizations'] else 'DUAL'
+            
+            final_data.append({
+                'freq': freq,
+                'theta': data['theta'] if data['theta'] is not None else 0.0,
+                'phi': data['phi'] if data['phi'] is not None else 0.0,
+                'horn_gain': data['horn_gain'],
+                'theta_corrected': data['theta_corrected'] if data['theta_corrected'] is not None else 0.0,
+                'phi_corrected': data['phi_corrected'] if data['phi_corrected'] is not None else 0.0,
+                'theta_corrected_vm': data['theta_corrected_vm'] if data['theta_corrected_vm'] is not None else 0.0,
+                'phi_corrected_vm': data['phi_corrected_vm'] if data['phi_corrected_vm'] is not None else 0.0,
+                'reference_power': ref_power,
+                'polarization': polarization
+            })
+        
+        # 按频率排序
+        final_data.sort(key=lambda x: x['freq'])
+        
+        # 使用第一个文件的元数据作为基础
+        base_meta = all_meta[0].copy()
+        
+        # 更新元数据中的关键字段
+        freqs = [p['freq'] for p in final_data]
+        ref_powers = list({p['reference_power'] for p in final_data})
+        polarizations = list({p['polarization'] for p in final_data})
+        
+        # 构建新的元数据
+        base_meta['freq_params'] = {
+            'start_ghz': min(freqs),
+            'stop_ghz': max(freqs),
+            'step_ghz': 'FreqList',
+            'custom_freqs': sorted(freqs)
+        }
+        base_meta['points'] = len(final_data)
+        
+        # 处理参考功率显示
+        if len(ref_powers) == 1:
+            ref_power_str = f"{ref_powers[0]:.1f}"
+        else:
+            ref_power_str = '_'.join([f"{p:.1f}" for p in sorted(ref_powers)])
+        
+        # 处理极化模式显示
+        if len(polarizations) == 1:
+            polarization_str = polarizations[0]
+        else:
+            polarization_str = 'DUAL'
+        
+        # 更新基础参数
+        base_meta['base_param'] = {
+            'ref_power': ref_power_str,
+            'polarization': polarization_str,
+            'distance': 1.0,
+            'operator': 'SYSTEM'
+        }
+        
+        # 生成输出文件名
+        if output_filename is None:
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%SZ")
+            output_filename = (
+                f"RNX_Cal_{polarization_str}_"
+                f"RefPwr{ref_power_str}dBm_"
+                f"{min(freqs)}to{max(freqs)}GHz_"
+                f"stepFreqList_{timestamp}.csv"
+            )
+        
+        # 创建新校准文件
+        self.create_new_calibration(
+            equipment_meta=base_meta,
+            freq_params=base_meta['freq_params'],
+            base_param=base_meta['base_param'],
+            version_notes="Auto generated merged calibration file"
+        )
+        
+        # 添加所有数据点
+        for point in final_data:
+            self.add_data_point(point['freq'], {
+                'theta': point['theta'],
+                'phi': point['phi'],
+                'horn_gain': point['horn_gain'],
+                'theta_corrected': point['theta_corrected'],
+                'phi_corrected': point['phi_corrected'],
+                'theta_corrected_vm': point['theta_corrected_vm'],
+                'phi_corrected_vm': point['phi_corrected_vm'],
+                'reference_power': point['reference_power'],
+                'polarization': point['polarization']
+            })
+        
+        # 完成校准
+        archived_path = self.finalize_calibration("Merged calibration file from multiple sources")
+        
+        return archived_path
+
 
     def _generate_header(self) -> str:
         """生成标准文件头"""
@@ -341,6 +550,17 @@ class CalibrationFileManager:
         
         # 验证数据范围
         for key, value in data.items():
+            # 特殊处理polarization字段
+            if key == 'polarization':
+                if not isinstance(value, str):
+                    self.log(f"极化模式必须是字符串: {value}", "ERROR")
+                    return False
+                if value.upper() not in ['THETA', 'PHI', 'DUAL']:
+                    self.log(f"无效的极化模式: {value}", "ERROR")
+                    return False
+                continue
+                
+            # 验证其他数值字段
             if not isinstance(value, (int, float)):
                 self.log(f"无效数据格式: {key}={value}", "ERROR")
                 return False
@@ -362,7 +582,9 @@ class CalibrationFileManager:
             f"{data.get('theta_corrected', 0.0):.2f},"
             f"{data.get('phi_corrected', 0.0):.2f},"
             f"{data.get('theta_corrected_vm', 0.0):.2f},"
-            f"{data.get('phi_corrected_vm', 0.0):.2f}\n"
+            f"{data.get('phi_corrected_vm', 0.0):.2f},"
+            f"{data.get('reference_power', 0.0):.2f},"
+            f"{data.get('polarization', 'DUAL')}\n"
         )
         
         # 写入数据（线程安全）
@@ -370,6 +592,7 @@ class CalibrationFileManager:
             f.write(data_row)
         
         return True
+
 
 
     def add_calibration_point(self, point: 'CalibrationPoint') -> bool:

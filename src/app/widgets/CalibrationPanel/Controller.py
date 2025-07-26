@@ -199,6 +199,7 @@ class CalibrationController(QObject):
     def _import_antenna_gain(self):
         """导入天线增益文件并创建插值器"""
         try:
+            
             self.cal_manager.generate_default_calibration((8,40),1)
 
             file_path, _ = QFileDialog.getOpenFileName(

@@ -35,7 +35,7 @@ class CalibrationView(QWidget):
             Qt.WindowMinimizeButtonHint |
             Qt.WindowCloseButtonHint
         )
-        self.setFixedSize(700, 1000)  # 增加高度以容纳新控件
+        self.setFixedSize(700, 1100)  # 增加高度以容纳新控件
         
         # 设置窗口图标
         icon_path = "src/resources/icons/icon_calibration.png"

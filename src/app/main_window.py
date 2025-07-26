@@ -82,7 +82,8 @@ class MainWindow(MainWindowUI):
         self.raw_power_input.textChanged.connect(self.on_raw_power_input_changed)
         #工具栏校准按钮
         self.calibration_action.triggered.connect(self.show_calibration_panel)
-        self.help_action.triggered.connect(self.open_help_document)  # 添加帮助按钮连接
+        self.import_action.triggered.connect(self.merge_calibration_files) 
+        self.help_action.triggered.connect(self.open_help_document)
 
         # 状态栏初始信息
         self.show_status("系统就绪。")
@@ -140,6 +141,80 @@ class MainWindow(MainWindowUI):
             # 将校准面板置于前端
             self.calibration_panel.raise_()
             self.calibration_panel.activateWindow()
+
+
+    def merge_calibration_files(self):
+        """合并多个校准文件，合并成功后询问是否导入"""
+        from PyQt5.QtWidgets import QFileDialog, QMessageBox
+        from PyQt5.QtCore import Qt
+        
+        # 确保cal_manager已初始化
+        if not hasattr(self, 'cal_manager') or self.cal_manager is None:
+            self.cal_manager = self.calibrationFileManager(log_callback=self.log)
+        
+        # 打开文件选择对话框，允许多选
+        file_dialog = QFileDialog()
+        file_dialog.setFileMode(QFileDialog.ExistingFiles)
+        file_dialog.setNameFilter("校准文件 (*.csv *.bin);;所有文件 (*)")
+        
+        # 应用主窗口的样式表到文件对话框
+        if hasattr(self, 'styleSheet'):
+            file_dialog.setStyleSheet(self.styleSheet())
+        
+        if file_dialog.exec_():
+            selected_files = file_dialog.selectedFiles()
+            
+            if len(selected_files) < 2:
+                warning_box = QMessageBox(QMessageBox.Warning, "选择不足", 
+                                    "请至少选择2个校准文件进行合并", 
+                                    QMessageBox.Ok, self)
+                # 应用样式表
+                if hasattr(self, 'styleSheet'):
+                    warning_box.setStyleSheet(self.styleSheet())
+                warning_box.exec_()
+                return
+                
+            try:
+                # 调用CalibrationFileManager的合并方法
+                merged_file = self.cal_manager.merge_calibration_files(selected_files)
+                
+                # 创建自定义消息框以确保样式一致
+                msg_box = QMessageBox(self)
+                msg_box.setWindowTitle("合并成功")
+                msg_box.setText(f"成功合并{len(selected_files)}个校准文件\n保存为: {merged_file}")
+                msg_box.setInformativeText("是否要导入合并后的校准数据?")
+                msg_box.setIcon(QMessageBox.Information)
+                msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+                msg_box.setDefaultButton(QMessageBox.Yes)
+                
+                # 应用主窗口的样式表
+                if hasattr(self, 'styleSheet'):
+                    msg_box.setStyleSheet(self.styleSheet())
+                
+                # 确保对话框居中显示
+                msg_box.setWindowModality(Qt.ApplicationModal)
+                
+                ret = msg_box.exec_()
+                
+                self.log(f"校准文件合并成功: {merged_file}", "SUCCESS")
+                
+                if ret == QMessageBox.Yes:
+                    # 用户选择导入
+                    self.load_calibration_file(merged_file)
+                    self.log("已导入合并后的校准数据", "INFO")
+                else:
+                    self.log("用户选择不导入合并后的校准数据", "INFO")
+                    
+            except Exception as e:
+                error_box = QMessageBox(QMessageBox.Critical, "合并失败", 
+                                    f"合并校准文件时出错:\n{str(e)}", 
+                                    QMessageBox.Ok, self)
+                # 应用样式表
+                if hasattr(self, 'styleSheet'):
+                    error_box.setStyleSheet(self.styleSheet())
+                error_box.exec_()
+                self.log(f"合并校准文件失败: {str(e)}", "ERROR")
+
 
     # endregion
 

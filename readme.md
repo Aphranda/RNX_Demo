@@ -1,9 +1,7 @@
 
 ```
 RNX_Demo
-├─ 📁.idea
 ├─ 📁.vscode
-├─ 📁build
 ├─ 📁calibrations
 │  ├─ 📁archive
 │  │  ├─ 📁KA_PHI
@@ -38,6 +36,9 @@ RNX_Demo
 │  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-20.0dBm_18.042799to26.5GHz_stepFREQLIST_20250722_080524Z.csv
 │  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-30.0dBm_18.042799to26.5GHz_stepFREQLIST_20250722_080456Z.csv
 │  │  │  └─ 📄RNX_Cal_DualPol_REF_POWER0.0dBm_18.042799to26.5GHz_stepFREQLIST_20250722_080607Z.csv
+│  │  ├─ 📁RealData
+│  │  │  ├─ 📄RNX_Cal_THETA_RefPwr-16.81dBm_12.47576to17.545861GHz_step-FreqList_20250722_104650Z.csv
+│  │  │  └─ 📄RNX_Cal_THETA_RefPwr-30.0dBm_12.47576to17.545861GHz_step-FreqList_20250722_103025Z.csv
 │  │  ├─ 📁X_PHI
 │  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-10.0dBm_8.0to11.941833GHz_stepFREQLIST_20250722_090011Z.csv
 │  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-20.0dBm_8.0to11.941833GHz_stepFREQLIST_20250722_085948Z.csv
@@ -48,11 +49,13 @@ RNX_Demo
 │  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-20.0dBm_8.0to11.941833GHz_stepFREQLIST_20250722_090332Z.csv
 │  │  │  ├─ 📄RNX_Cal_DualPol_REF_POWER-30.0dBm_8.0to11.941833GHz_stepFREQLIST_20250722_090304Z.csv
 │  │  │  └─ 📄RNX_Cal_DualPol_REF_POWER-40.0dBm_8.0to11.941833GHz_stepFREQLIST_20250722_090240Z.csv
-│  │  ├─ 📄RNX_Cal_THETA_RefPwr-16.81dBm_12.47576to17.545861GHz_step-FreqList_20250722_104650Z.csv
-│  │  ├─ 📄RNX_Cal_THETA_RefPwr-30.0dBm_12.47576to17.545861GHz_step-FreqList_20250722_103025Z.csv
-│  │  └─ 📄校准数据.zip
-│  └─ 📁backup
-├─ 📁dist
+│  │  ├─ 📄RNX_Cal_PHI_RefPwr-20.0dBm_8to40GHz_step1_20250726_164406Z.csv
+│  │  ├─ 📄RNX_Cal_THETA_RefPwr-20.0dBm_13to40GHz_step1_20250726_164211Z.csv
+│  │  ├─ 📄RNX_Cal_THETA_RefPwr-20.0dBm_8to12GHz_step1_20250726_163844Z.csv
+│  │  ├─ 📄RNX_Cal_THETA_RefPwr-20.0dBm_8to12GHz_step1_20250726_164101Z.csv
+│  │  └─ 📄RNX_Cal_综合文件.csv
+│  ├─ 📁backup
+│  └─ 📄RNX_Cal_综合文件.csv
 ├─ 📁docs
 │  ├─ 📄12_18GHZ.csv
 │  ├─ 📄18_26.5GHZ.csv
@@ -123,8 +126,6 @@ RNX_Demo
 │  │  │  │  ├─ 📄LogWidget.py
 │  │  │  │  ├─ 📄View.py
 │  │  │  │  └─ 📄__init__.py
-│  │  │  ├─ 📁MotionControl
-│  │  │  ├─ 📁SignalSourceControl
 │  │  │  ├─ 📁StatusPanel
 │  │  │  │  ├─ 📁__pycache__
 │  │  │  │  ├─ 📄Controller.py
@@ -139,10 +140,9 @@ RNX_Demo
 │  │  │  └─ 📄SimpleLinkDiagram.py
 │  │  ├─ 📁__pycache__
 │  │  └─ 📄main_window.py
-│  ├─ 📁build
 │  ├─ 📁calibrations
-│  │  ├─ 📁archive
-│  │  └─ 📁backup
+│  │  └─ 📁archive
+│  │     └─ 📄RNX_Cal_综合文件.csv
 │  ├─ 📁debug
 │  │  ├─ 📄cal_gain.py
 │  │  ├─ 📄debug_calibration_panel.py
@@ -152,7 +152,6 @@ RNX_Demo
 │  │  ├─ 📄test_mian.py
 │  │  ├─ 📄英联标准增益18-40GHz.csv
 │  │  └─ 📄英联标准增益2-18GHz.csv
-│  ├─ 📁dist
 │  ├─ 📁docs
 │  │  ├─ 📄RNX_使用说明文档.pdf
 │  │  └─ 📄RNX量子天线测试系统指令表.pdf
@@ -173,7 +172,6 @@ RNX_Demo
 │  │  │  └─ 📄main_window_ui.py
 │  │  └─ 📄resources.qrc
 │  ├─ 📁test
-│  │  ├─ 📁__pycache__
 │  │  └─ 📄SignalUnitConverter_test.py
 │  ├─ 📁__pycache__
 │  └─ 📄mian.py

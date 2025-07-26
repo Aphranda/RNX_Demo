@@ -170,10 +170,10 @@ class MainWindowUI(QMainWindow):
         # 数据导入
         icon_path = "src/resources/icons/icon_import.png"
         if Path(icon_path).exists():
-            self.import_action = QAction(QIcon(icon_path), "导入数据", self)
+            self.import_action = QAction(QIcon(icon_path), "合并校准数据", self)
         else:
-            self.import_action = QAction("导入数据", self)
-        self.import_action.setStatusTip("导入测试数据")
+            self.import_action = QAction("合并校准数据", self)
+        self.import_action.setStatusTip("合并校准数据")
         self.toolbar.addAction(self.import_action)
         
         # 数据导出
