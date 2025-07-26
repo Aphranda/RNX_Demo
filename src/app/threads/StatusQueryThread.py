@@ -75,9 +75,9 @@ class StatusQueryThread(QThread):
                 
             if status["motion"] or status["src"]:
                 # 模拟数据填充
-                # status["src"]["freq"] = "15000000000"
-                # status["src"]["raw_power"] = "-30"
-                # status["src"]["rf"] = "ON"
+                status["src"]["freq"] = "15000000000"
+                status["src"]["raw_power"] = "-30"
+                status["src"]["rf"] = "ON"
                 self.status_signal.emit(status)
                 
             axis_idx = (axis_idx + 1) % len(axes)

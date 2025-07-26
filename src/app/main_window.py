@@ -682,7 +682,18 @@ class MainWindow(MainWindowUI):
     
             if result:
                 self.calibration_data = result['data']
-                ref_power = result['meta'].get('ref_power', -30.0)
+                # 处理ref_power可能是列表的情况
+                ref_power = result['meta'].get("base_param", {}).get("ref_power", -30.0)
+                if isinstance(ref_power, list):
+                    if len(ref_power) > 0:
+                        self.log(f"检测到参考功率列表，{ref_power} dBm", "INFO")
+                    else:
+                        ref_power = -30.0  # 默认值
+                        self.log("参考功率列表为空，使用默认值-30dBm", "WARNING")
+                else:
+                    # 如果不是列表，直接转换为float
+                    ref_power = float(ref_power) if ref_power is not None else -30.0
+
                 self.log(f"校准文件加载成功，参考功率(ref_power)为: {ref_power} dBm", "INFO")
                 self.compensation_enabled = True
 
@@ -794,7 +805,12 @@ class MainWindow(MainWindowUI):
         current_link = self.parse_link_response(self.status_cache.get("src", {}).get("link", ""))
         
         # 获取参考功率(从校准文件元数据中获取)
-        ref_power = float(self.cal_manager.current_meta.get('ref_power', -30.0))  # 默认-30dBm
+        ref_power = self.cal_manager.current_meta.get("base_param", {}).get("ref_power", -30.0)  # 默认-30dBm
+        if isinstance(ref_power, list):
+            if len(ref_power) == 1:
+                ref_power = ref_power[0]
+            else:
+                ref_power = closest_point.get('reference_power', 0.0)
         
         # 根据链路模式选择使用Theta_corrected还是Phi_corrected，并减去参考功率
         if "THETA" in current_link:
