@@ -82,12 +82,52 @@ class MainWindow(MainWindowUI):
         self.raw_power_input.textChanged.connect(self.on_raw_power_input_changed)
         #工具栏校准按钮
         self.calibration_action.triggered.connect(self.show_calibration_panel)
+        self.help_action.triggered.connect(self.open_help_document)  # 添加帮助按钮连接
 
-        
-        
         # 状态栏初始信息
         self.show_status("系统就绪。")
         self.log("系统启动。", "INFO")
+
+        # endregion
+
+    # region 工具栏方法
+
+    def open_help_document(self):
+        """打开帮助文档"""
+        import os
+        import subprocess
+        from PyQt5.QtWidgets import QMessageBox
+        
+        # 文档路径列表
+        doc_paths = [
+            os.path.join("src", "docs", "RNX量子天线测试系统指令表.pdf"),
+            os.path.join("src", "docs", "RNX_使用说明文档.pdf"),
+        ]
+        
+        # 检查并打开所有找到的文档
+        opened_count = 0
+        for path in doc_paths:
+            if os.path.exists(path):
+                try:
+                    # 根据不同平台使用适当的方式打开PDF
+                    if os.name == 'nt':  # Windows
+                        os.startfile(path)
+                    elif os.name == 'posix':  # macOS or Linux
+                        if os.uname().sysname == 'Darwin':  # macOS
+                            subprocess.run(['open', path], check=True)
+                        else:  # Linux
+                            subprocess.run(['xdg-open', path], check=True)
+                    opened_count += 1
+                    self.log(f"已打开帮助文档: {path}", "INFO")
+                except Exception as e:
+                    QMessageBox.warning(self, "打开失败", f"无法打开帮助文档 {os.path.basename(path)}:\n{str(e)}")
+                    self.log(f"打开帮助文档失败: {str(e)}", "ERROR")
+        
+        # 如果没有找到任何文档，显示警告
+        if opened_count == 0:
+            QMessageBox.warning(self, "文件未找到", "未找到任何帮助文档")
+            self.log("未找到任何帮助文档", "ERROR")
+
 
     def show_calibration_panel(self):
         """显示或隐藏校准面板"""
@@ -101,7 +141,7 @@ class MainWindow(MainWindowUI):
             self.calibration_panel.raise_()
             self.calibration_panel.activateWindow()
 
-        # endregion
+    # endregion
 
     
     # --- 标准SCPI ---
@@ -279,6 +319,12 @@ class MainWindow(MainWindowUI):
     def update_status_panel(self, status):
         """Main method to update the status panel"""
         self._update_status_cache(status)
+
+        # 获取信号源状态并更新链路图
+        src_status = status.get("src", {})
+        rf_state = src_status.get("rf", "OFF").upper()  # 默认OFF状态
+        self.link_diagram.set_source_state(rf_state == "ON")  # 明确传递布尔值
+
         # 委托给StatusPanel处理更新逻辑
         self.status_panel._controller.update_motion_status(status.get("motion", {}))
         self.status_panel._controller.update_src_status(status.get("src", {}))

@@ -37,12 +37,15 @@ class SimpleLinkDiagram(QLabel):
         self.animation_timer.timeout.connect(self.update_animation)
         self.animation_timer.start(50)  # 20 FPS
         
+        # 信号源状态
+        self.source_on = False  # 默认关闭状态
+        
     def update_animation(self):
         """更新动画进度"""
         self.animation_progress = (self.animation_progress + 0.02) % 1.0
         
         # 当能量点接近天线时(>0.95)开始辐射动画
-        if self.animation_progress > 0.95:
+        if self.animation_progress > 0.95 and self.source_on:  # 只有信号源开启时才显示辐射
             self.radiation_progress = (self.radiation_progress + 0.1) % 1.0
         else:
             self.radiation_progress = 0
@@ -52,6 +55,18 @@ class SimpleLinkDiagram(QLabel):
         normalized_link = link_mode.upper().replace("__", "_")
         self.current_link = normalized_link
         self.update()
+        
+    def set_source_state(self, state):
+        """设置信号源状态
+        Args:
+            state: 可以是字符串"ON"/"OFF"或布尔值True/False
+        """
+        if isinstance(state, str):
+            self.source_on = state.upper() == "ON"
+        else:
+            self.source_on = bool(state)
+        self.update()
+
  
     def paintEvent(self, a0):
         super().paintEvent(a0)
@@ -65,7 +80,7 @@ class SimpleLinkDiagram(QLabel):
         highlight_color = QColor("#ea4335")
         highlight_text = QColor("#ea4335")
         energy_color = QColor(255, 215, 0, 200)
-        signal_source_color = QColor("#4285F4")
+        signal_source_color = QColor("#4285F4") if self.source_on else QColor("#9E9E9E")  # 根据状态改变颜色
         antenna_color = QColor("#5F6368")
         radiation_color = QColor(255, 215, 0, 80)
         
@@ -102,8 +117,12 @@ class SimpleLinkDiagram(QLabel):
         signal_rect = QRectF(com_cx - signal_w//2, com_cy - signal_h//2, signal_w, signal_h)
         
         grad = QLinearGradient(signal_rect.topLeft(), signal_rect.bottomRight())
-        grad.setColorAt(0, QColor("#E8F0FE"))
-        grad.setColorAt(1, QColor("#D2E3FC"))
+        if self.source_on:
+            grad.setColorAt(0, QColor("#E8F0FE"))
+            grad.setColorAt(1, QColor("#D2E3FC"))
+        else:
+            grad.setColorAt(0, QColor("#F5F5F5"))
+            grad.setColorAt(1, QColor("#E0E0E0"))
         painter.setBrush(grad)
         painter.setPen(QPen(signal_source_color, 2))
         painter.drawRoundedRect(signal_rect, 8, 8)
@@ -171,8 +190,8 @@ class SimpleLinkDiagram(QLabel):
             )
             painter.drawPath(path)
             
-            # 能量流动效果
-            if is_active:
+            # 能量流动效果 - 只在信号源开启时显示
+            if is_active and self.source_on:
                 t = self.animation_progress
                 p0 = QPointF(com_cx + signal_w//2, com_cy)
                 p1 = QPointF(ctrl1_x, ctrl1_y)
@@ -256,7 +275,7 @@ class SimpleLinkDiagram(QLabel):
                            Qt.AlignVCenter | Qt.AlignLeft, name)
             
             # ==================== 天线辐射效果 ====================
-            if is_active and self.radiation_progress > 0:
+            if is_active and self.radiation_progress > 0 and self.source_on:  # 只有信号源开启时才显示辐射
                 # 使用配置参数计算辐射效果
                 min_radius, max_radius = self.radiation_config['ring_radius_range']
                 radius = min_radius + (max_radius - min_radius) * self.radiation_progress
