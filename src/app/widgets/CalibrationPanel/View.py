@@ -93,7 +93,8 @@ class CalibrationView(QWidget):
         self.theta_radio = QRadioButton("THETA")
         self.phi_radio = QRadioButton("PHI")
         self.dual_radio = QRadioButton("DUAL-T/P")
-        self.dual_radio.setChecked(True)
+        self.theta_radio.setChecked(True)
+        self.dual_radio.setDisabled(True)
         
         # 频点列表控件
         self.freq_list_group = QGroupBox("频点列表")
@@ -184,6 +185,7 @@ class CalibrationView(QWidget):
         polarization_layout.addWidget(self.theta_radio)
         polarization_layout.addWidget(self.phi_radio)
         polarization_layout.addWidget(self.dual_radio)
+
         basic_param_layout.addRow("极化选择:", polarization_layout)
         
         self.basic_param_group.setLayout(basic_param_layout)
