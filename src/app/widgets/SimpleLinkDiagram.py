@@ -3,7 +3,7 @@ from PyQt5.QtGui import (QColor, QPainter, QPen, QFont,
                          QLinearGradient, QPainterPath, QBrush, QPolygonF)
 from PyQt5.QtCore import Qt, QPointF, QRectF, QTimer, QPoint
 import math
- 
+
 class SimpleLinkDiagram(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -13,17 +13,41 @@ class SimpleLinkDiagram(QLabel):
         self.setStyleSheet("background: transparent;")
         self.setAttribute(Qt.WA_OpaquePaintEvent)
         
+        # 能量点配置
+        self.energy_config = {
+            'point_count': 4,        # 能量点数量
+            'point_spacing': 0.08,   # 能量点间距(时间间隔)
+            'point_size_range': (2, 3),  # 能量点大小范围(min, max)
+            'point_alpha_range': (80, 200)  # 能量点透明度范围(min, max)
+        }
+        
+        # 辐射效果配置
+        self.radiation_config = {
+            'angle_range': (-60, 60),  # 辐射角度范围(度)
+            'angle_step': 15,          # 辐射线角度步长(度)
+            'ring_count': 10,           # 同心圆环数量
+            'ring_radius_range': (15, 80),  # 圆环半径范围(min, max)
+            'ring_alpha_range': (40, 120)   # 圆环透明度范围(min, max)
+        }
+        
         # 动画相关属性
         self.animation_progress = 0
+        self.radiation_progress = 0
         self.animation_timer = QTimer(self)
         self.animation_timer.timeout.connect(self.update_animation)
         self.animation_timer.start(50)  # 20 FPS
         
     def update_animation(self):
         """更新动画进度"""
-        self.animation_progress = (self.animation_progress + 0.05) % 1.0
-        self.update()
+        self.animation_progress = (self.animation_progress + 0.02) % 1.0
         
+        # 当能量点接近天线时(>0.95)开始辐射动画
+        if self.animation_progress > 0.95:
+            self.radiation_progress = (self.radiation_progress + 0.1) % 1.0
+        else:
+            self.radiation_progress = 0
+        self.update()
+
     def set_link(self, link_mode):
         normalized_link = link_mode.upper().replace("__", "_")
         self.current_link = normalized_link
@@ -42,7 +66,8 @@ class SimpleLinkDiagram(QLabel):
         highlight_text = QColor("#ea4335")
         energy_color = QColor(255, 215, 0, 200)
         signal_source_color = QColor("#4285F4")
-        antenna_color = QColor("#5F6368")  # 天线颜色
+        antenna_color = QColor("#5F6368")
+        radiation_color = QColor(255, 215, 0, 80)
         
         # 字体设置
         font = QFont("Segoe UI", 10, QFont.Medium)
@@ -51,8 +76,8 @@ class SimpleLinkDiagram(QLabel):
         # 布局参数
         start_x = 120
         start_y = 20
-        antenna_w = 40  # 保持与原来节点相同宽度
-        antenna_h = 24  # 保持与原来节点相同高度
+        antenna_w = 40
+        antenna_h = 24
         gap_y = 35
  
         # 节点定义
@@ -72,20 +97,18 @@ class SimpleLinkDiagram(QLabel):
         com_cy = start_y + (len(node_list) * (antenna_h + gap_y) - gap_y) // 2
 
         # ==================== 绘制信号源样式 ====================
-        # 1. 信号源尺寸参数
-        signal_w = 70  # 加宽信号源
-        signal_h = 50  # 加高信号源
+        signal_w = 70
+        signal_h = 50
         signal_rect = QRectF(com_cx - signal_w//2, com_cy - signal_h//2, signal_w, signal_h)
         
-        # 渐变填充
         grad = QLinearGradient(signal_rect.topLeft(), signal_rect.bottomRight())
         grad.setColorAt(0, QColor("#E8F0FE"))
         grad.setColorAt(1, QColor("#D2E3FC"))
         painter.setBrush(grad)
         painter.setPen(QPen(signal_source_color, 2))
-        painter.drawRoundedRect(signal_rect, 8, 8)  # 增加圆角半径
+        painter.drawRoundedRect(signal_rect, 8, 8)
         
-        # 2. 绘制波形符号(正弦波) - 调整到矩形内部
+        # 绘制波形符号
         wave_path = QPainterPath()
         wave_start_x = com_cx - signal_w//2 + 15
         wave_end_x = com_cx + signal_w//2 - 15
@@ -101,32 +124,31 @@ class SimpleLinkDiagram(QLabel):
         painter.setPen(QPen(signal_source_color.darker(120), 2))
         painter.drawPath(wave_path)
         
-        # 3. 绘制内部辐射线(完全在矩形内)
-        painter.setPen(QPen(signal_source_color.lighter(130), 1.2))  # 细线
-        inner_radius = min(signal_w, signal_h) * 0.35  # 内部半径
+        # 绘制内部辐射线
+        painter.setPen(QPen(signal_source_color.lighter(130), 1.2))
+        inner_radius = min(signal_w, signal_h) * 0.35
         
         for angle in range(0, 360, 45):
             rad = math.radians(angle)
-            # 辐射线从中心到内边缘
             end_p = QPointF(com_cx + inner_radius * math.cos(rad), 
                            com_cy + inner_radius * math.sin(rad))
             painter.drawLine(QPointF(com_cx, com_cy), end_p)
         
-        # 4. 信号源文字标签(向左移动并确保完整显示)
-        label_rect = QRectF(com_cx - signal_w//2 - 120,  # 向左移动更多
+        # 信号源文字标签
+        label_rect = QRectF(com_cx - signal_w//2 - 120,
                            com_cy - signal_h//2, 
-                           110,  # 增加标签宽度
+                           110,
                            signal_h)
         
         painter.setPen(QPen(QColor("#0F1018"), 1))
-        painter.drawText(label_rect, Qt.AlignVCenter | Qt.AlignRight, "SOURCE")  # 完整标签
+        painter.drawText(label_rect, Qt.AlignVCenter | Qt.AlignRight, "SOURCE")
 
         # ==================== 绘制天线节点和连线 ====================
-        antenna_x = com_cx + 200  # 调整天线X位置
+        antenna_x = com_cx + 200
         for i, (name, link_key) in enumerate(node_list):
             ny = start_y + i * (antenna_h + gap_y)
             
-            # 1. 绘制连线(保持不变)
+            # 绘制连线
             is_active = self.current_link == link_key
             line_pen = QPen(highlight_color if is_active else line_color, 
                         4 if is_active else 2.5)
@@ -149,7 +171,7 @@ class SimpleLinkDiagram(QLabel):
             )
             painter.drawPath(path)
             
-            # 能量流动效果(保持不变)
+            # 能量流动效果
             if is_active:
                 t = self.animation_progress
                 p0 = QPointF(com_cx + signal_w//2, com_cy)
@@ -163,47 +185,46 @@ class SimpleLinkDiagram(QLabel):
                 painter.setBrush(QBrush(energy_color))
                 painter.drawEllipse(energy_point, 3, 3)
                 
-                for j in range(1, 3):
-                    tail_t = (t - j*0.15) % 1.0
+                # 使用配置参数绘制能量点尾迹
+                for j in range(1, self.energy_config['point_count'] + 1):
+                    tail_t = (t - j * self.energy_config['point_spacing']) % 1.0
                     if tail_t < 0: continue
                     tail_point = self.cubic_bezier(p0, p1, p2, p3, tail_t)
-                    alpha = 200 - j*80
-                    size = max(1, 3 - j)
+                    
+                    # 计算大小和透明度
+                    size = max(self.energy_config['point_size_range'][0], 
+                             self.energy_config['point_size_range'][1] - j)
+                    alpha = max(self.energy_config['point_alpha_range'][0], 
+                              self.energy_config['point_alpha_range'][1] - j * 40)
+                    
                     if alpha > 0:
                         painter.setBrush(QBrush(QColor(255, 215, 0, alpha)))
                         painter.drawEllipse(tail_point, size, size)
             
-            # 2. 绘制喇叭天线(修正方向，喇叭口朝左)
+            # 绘制喇叭天线
             antenna_left = antenna_x - antenna_w//2
             antenna_top = ny
 
-            # 喇叭天线参数
             horn_width = antenna_w
             horn_height = antenna_h
-            flare_angle = 15  # 喇叭张角(度)
-            flare_length = horn_width * 0.6  # 喇叭部分长度
+            flare_angle = 15
+            flare_length = horn_width * 0.6
 
-            # 创建喇叭天线路径(修正方向)
             horn_path = QPainterPath()
-
-            # 右侧矩形部分(波导部分) - 现在在右侧
             waveguide_width = horn_width - flare_length
-            waveguide_left = antenna_left + flare_length  # 波导部分向右移动
+            waveguide_left = antenna_left
 
-            # 左侧喇叭部分(开口朝左)
             flare_top = antenna_top + (horn_height/2 - (flare_length * math.tan(math.radians(flare_angle))/2))
             flare_bottom = antenna_top + horn_height - (horn_height/2 - (flare_length * math.tan(math.radians(flare_angle))/2))
 
-            # 绘制路径(从左上角开始顺时针)
-            horn_path.moveTo(antenna_left, flare_top)  # 喇叭口左上角
-            horn_path.lineTo(antenna_left + flare_length, antenna_top)  # 到波导左上角
-            horn_path.lineTo(antenna_left + horn_width, antenna_top)  # 到波导右上角
-            horn_path.lineTo(antenna_left + horn_width, antenna_top + horn_height)  # 到波导右下角
-            horn_path.lineTo(antenna_left + flare_length, antenna_top + horn_height)  # 到波导左下角
-            horn_path.lineTo(antenna_left, flare_bottom)  # 到喇叭口右下角
-            horn_path.closeSubpath()  # 闭合路径
+            horn_path.moveTo(antenna_left, flare_top)
+            horn_path.lineTo(antenna_left + flare_length, antenna_top)
+            horn_path.lineTo(antenna_left + horn_width, antenna_top)
+            horn_path.lineTo(antenna_left + horn_width, antenna_top + horn_height)
+            horn_path.lineTo(antenna_left + flare_length, antenna_top + horn_height)
+            horn_path.lineTo(antenna_left, flare_bottom)
+            horn_path.closeSubpath()
 
-            # 填充天线(保持不变)
             if is_active:
                 grad = QLinearGradient(antenna_left, antenna_top, 
                                     antenna_left + horn_width, antenna_top + horn_height)
@@ -220,21 +241,56 @@ class SimpleLinkDiagram(QLabel):
             painter.setBrush(grad)
             painter.drawPath(horn_path)
 
-            # 3. 绘制天线内部细节(波导指示线) - 调整到波导部分中心
+            # 绘制天线内部细节
             painter.setPen(QPen(antenna_color.darker(120), 0.8))
             guide_line_y = antenna_top + horn_height/2
             painter.drawLine(QPointF(waveguide_left + 2, guide_line_y),
-                            QPointF(antenna_left + horn_width - 2, guide_line_y))
-
+                            QPointF(waveguide_left + waveguide_width - 2, guide_line_y))
             
-            # 4. 绘制文字标签(向右移动一点)
+            # 绘制文字标签
             text_pen = QPen(highlight_text if is_active else node_text, 1)
             painter.setPen(text_pen)
             painter.setBrush(Qt.NoBrush)
-            painter.drawText(antenna_x + horn_width//2 + 8,  # 增加间距
+            painter.drawText(antenna_x + horn_width//2 + 8,
                            ny, 80, horn_height, 
                            Qt.AlignVCenter | Qt.AlignLeft, name)
-    
+            
+            # ==================== 天线辐射效果 ====================
+            if is_active and self.radiation_progress > 0:
+                # 使用配置参数计算辐射效果
+                min_radius, max_radius = self.radiation_config['ring_radius_range']
+                radius = min_radius + (max_radius - min_radius) * self.radiation_progress
+                
+                radiation_center = QPointF(antenna_left + horn_width, antenna_top + horn_height/2)
+                
+                # 绘制辐射波(扇形)
+                start_angle, end_angle = self.radiation_config['angle_range']
+                angle_span = end_angle - start_angle
+                
+                for i in range(1, self.radiation_config['ring_count'] + 1):
+                    r = radius * (i / self.radiation_config['ring_count'])
+                    min_alpha, max_alpha = self.radiation_config['ring_alpha_range']
+                    alpha = int(max_alpha * (1 - i / self.radiation_config['ring_count']))
+                    
+                    painter.setPen(QPen(QColor(radiation_color.red(), radiation_color.green(), 
+                                    radiation_color.blue(), alpha), 2.0))
+                    
+                    # 绘制扇形
+                    path = QPainterPath()
+                    path.moveTo(radiation_center)
+                    path.arcTo(radiation_center.x() - r, radiation_center.y() - r, 
+                            r * 2, r * 2, 
+                            start_angle, angle_span)
+                    path.closeSubpath()
+                    painter.drawPath(path)
+                    
+                    # 添加辐射线
+                    for angle in range(start_angle, end_angle, self.radiation_config['angle_step']):
+                        rad = math.radians(angle)
+                        end_x = radiation_center.x() + r * math.cos(rad)
+                        end_y = radiation_center.y() + r * math.sin(rad)
+                        painter.drawLine(radiation_center, QPointF(end_x, end_y))
+
         painter.end()
     
     def cubic_bezier(self, p0, p1, p2, p3, t):
