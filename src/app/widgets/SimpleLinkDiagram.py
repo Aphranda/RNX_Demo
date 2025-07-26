@@ -2,12 +2,13 @@ from PyQt5.QtWidgets import QLabel
 from PyQt5.QtGui import (QColor, QPainter, QPen, QFont, 
                          QLinearGradient, QPainterPath, QBrush)
 from PyQt5.QtCore import Qt, QPointF, QRectF, QTimer
+import math
 
 class SimpleLinkDiagram(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumHeight(400)
-        self.setMinimumWidth(400)
+        self.setMinimumHeight(450)  # 增加高度以容纳信号源和标签
+        self.setMinimumWidth(500)
         self.current_link = "FEED_X_THETA"
         self.setStyleSheet("background: transparent;")
         self.setAttribute(Qt.WA_OpaquePaintEvent)
@@ -39,14 +40,15 @@ class SimpleLinkDiagram(QLabel):
         line_color = QColor("#dadce0")
         highlight_color = QColor("#ea4335")
         highlight_text = QColor("#ea4335")
-        energy_color = QColor(255, 215, 0, 200)  # 金色能量点
+        energy_color = QColor(255, 215, 0, 200)
+        signal_source_color = QColor("#4285F4")
         
         # 字体设置
         font = QFont("Segoe UI", 10, QFont.Medium)
         painter.setFont(font)
 
         # 布局参数
-        start_x = 70
+        start_x = 120  # 向右移动给标签留空间
         start_y = 20
         node_w = 40
         node_h = 24
@@ -68,21 +70,62 @@ class SimpleLinkDiagram(QLabel):
         com_cx = start_x
         com_cy = start_y + (len(node_list) * (node_h + gap_y) - gap_y) // 2
 
-        # 画COM节点
-        painter.setPen(QPen(node_border, 1.5))
-        painter.drawEllipse(QRectF(com_cx - node_w//2, com_cy - node_h//2, node_w, node_h))
-
-        # COM节点文字
+        # ==================== 绘制信号源样式 ====================
+        # 1. 信号源尺寸参数
+        signal_w = 70  # 加宽信号源
+        signal_h = 50  # 加高信号源
+        signal_rect = QRectF(com_cx - signal_w//2, com_cy - signal_h//2, signal_w, signal_h)
+        
+        # 渐变填充
+        grad = QLinearGradient(signal_rect.topLeft(), signal_rect.bottomRight())
+        grad.setColorAt(0, QColor("#E8F0FE"))
+        grad.setColorAt(1, QColor("#D2E3FC"))
+        painter.setBrush(grad)
+        painter.setPen(QPen(signal_source_color, 2))
+        painter.drawRoundedRect(signal_rect, 8, 8)  # 增加圆角半径
+        
+        # 2. 绘制波形符号(正弦波) - 调整到矩形内部
+        wave_path = QPainterPath()
+        wave_start_x = com_cx - signal_w//2 + 15
+        wave_end_x = com_cx + signal_w//2 - 15
+        wave_height = 10
+        segments = 6
+        
+        wave_path.moveTo(wave_start_x, com_cy)
+        for i in range(1, segments+1):
+            x = wave_start_x + (i * (wave_end_x - wave_start_x)/segments)
+            y = com_cy + wave_height * math.sin(2 * math.pi * i / segments)
+            wave_path.lineTo(x, y)
+        
+        painter.setPen(QPen(signal_source_color.darker(120), 2))
+        painter.drawPath(wave_path)
+        
+        # 3. 绘制内部辐射线(完全在矩形内)
+        painter.setPen(QPen(signal_source_color.lighter(130), 1.2))  # 细线
+        inner_radius = min(signal_w, signal_h) * 0.35  # 内部半径
+        
+        for angle in range(0, 360, 45):
+            rad = math.radians(angle)
+            # 辐射线从中心到内边缘
+            end_p = QPointF(com_cx + inner_radius * math.cos(rad), 
+                           com_cy + inner_radius * math.sin(rad))
+            painter.drawLine(QPointF(com_cx, com_cy), end_p)
+        
+        # 4. 信号源文字标签(向左移动并确保完整显示)
+        label_rect = QRectF(com_cx - signal_w//2 - 120,  # 向左移动更多
+                           com_cy - signal_h//2, 
+                           110,  # 增加标签宽度
+                           signal_h)
+        
         painter.setPen(QPen(QColor("#0F1018"), 1))
-        painter.drawText(com_cx - node_w//2 - 100, com_cy - node_h//2, 100, node_h, 
-                        Qt.AlignVCenter | Qt.AlignRight, "COM")
+        painter.drawText(label_rect, Qt.AlignVCenter | Qt.AlignRight, "SOURCE")  # 完整标签
 
-        # 画节点和连线
-        node_x = com_cx + 160
+        # ==================== 绘制节点和连线 ====================
+        node_x = com_cx + 200  # 调整节点X位置
         for i, (name, link_key) in enumerate(node_list):
             ny = start_y + i * (node_h + gap_y)
             
-            # 1. 绘制连线
+            # 绘制连线(保持不变)
             is_active = self.current_link == link_key
             line_pen = QPen(highlight_color if is_active else line_color, 
                         4 if is_active else 2.5)
@@ -90,14 +133,12 @@ class SimpleLinkDiagram(QLabel):
             painter.setPen(line_pen)
             painter.setBrush(Qt.NoBrush)
             
-            # 创建贝塞尔曲线路径 - 使用统一的控制点设置
             path = QPainterPath()
-            path.moveTo(com_cx + node_w//2, com_cy)
+            path.moveTo(com_cx + signal_w//2, com_cy)
             
-            # 统一控制点设置，使所有曲线保持相似的平直度
-            ctrl1_x = com_cx + 80
+            ctrl1_x = com_cx + 90
             ctrl1_y = com_cy
-            ctrl2_x = node_x - 80
+            ctrl2_x = node_x - 90
             ctrl2_y = ny + node_h//2
             
             path.cubicTo(
@@ -107,26 +148,20 @@ class SimpleLinkDiagram(QLabel):
             )
             painter.drawPath(path)
             
-            # 如果是当前活动链接，绘制能量流动效果
+            # 能量流动效果(保持不变)
             if is_active:
-                # 计算能量点位置
                 t = self.animation_progress
-                p0 = QPointF(com_cx + node_w//2, com_cy)
+                p0 = QPointF(com_cx + signal_w//2, com_cy)
                 p1 = QPointF(ctrl1_x, ctrl1_y)
                 p2 = QPointF(ctrl2_x, ctrl2_y)
                 p3 = QPointF(node_x - node_w//2, ny + node_h//2)
                 
-                # 贝塞尔曲线上的点
                 energy_point = self.cubic_bezier(p0, p1, p2, p3, t)
                 
-                # 绘制能量点
                 painter.setPen(Qt.NoPen)
                 painter.setBrush(QBrush(energy_color))
-                
-                # 主能量点(3px)
                 painter.drawEllipse(energy_point, 3, 3)
                 
-                # 拖尾效果
                 for j in range(1, 3):
                     tail_t = (t - j*0.15) % 1.0
                     if tail_t < 0: continue
@@ -137,7 +172,7 @@ class SimpleLinkDiagram(QLabel):
                         painter.setBrush(QBrush(QColor(255, 215, 0, alpha)))
                         painter.drawEllipse(tail_point, size, size)
             
-            # 2. 绘制节点
+            # 绘制节点(保持不变)
             if is_active:
                 grad = QLinearGradient(node_x - node_w//2, ny, node_x + node_w//2, ny + node_h)
                 grad.setColorAt(0, QColor("#ffffff"))
@@ -153,7 +188,7 @@ class SimpleLinkDiagram(QLabel):
             
             painter.drawEllipse(QRectF(node_x - node_w//2, ny, node_w, node_h))
     
-            # 3. 绘制文字
+            # 绘制文字(保持不变)
             text_pen = QPen(highlight_text if is_active else node_text, 1)
             painter.setPen(text_pen)
             painter.setBrush(Qt.NoBrush)
