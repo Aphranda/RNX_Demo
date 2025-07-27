@@ -12,6 +12,7 @@ from app.widgets.LogWidget.LogWidget import LogWidget
 from app.widgets.SimpleLinkDiagram import SimpleLinkDiagram
 from app.widgets.StatusPanel.StatusPanel import StatusPanel
 from app.widgets.CalibrationPanel.CalibrationPanel import CalibrationPanel
+from app.widgets.PlotWdiget.PlotWidget import PlotWidget
 
 class MainWindowUI(QMainWindow):
     def __init__(self):
@@ -63,6 +64,12 @@ class MainWindowUI(QMainWindow):
         flags = Qt.WindowFlags(Qt.WindowType.Window) | Qt.WindowFlags(Qt.WindowType.WindowStaysOnTopHint)
         self.calibration_panel.setWindowFlags(flags)
         self.calibration_panel.hide()  # 初始隐藏
+
+        # 创建绘图窗口
+        self.plot_widget = PlotWidget(self)
+        flags = Qt.WindowFlags(Qt.WindowType.Window)
+        self.plot_widget.setWindowFlags(flags)
+        self.plot_widget.hide()
 
 
         # ETH 设置控件
@@ -179,10 +186,10 @@ class MainWindowUI(QMainWindow):
         # 数据导出
         icon_path = "src/resources/icons/icon_export.png"
         if Path(icon_path).exists():
-            self.export_action = QAction(QIcon(icon_path), "导出数据", self)
+            self.export_action = QAction(QIcon(icon_path), "代码链接", self)
         else:
-            self.export_action = QAction("导出数据", self)
-        self.export_action.setStatusTip("导出测试数据")
+            self.export_action = QAction("代码链接", self)
+        self.export_action.setStatusTip("代码链接")
         self.toolbar.addAction(self.export_action)
         
         # 添加分隔线
@@ -352,9 +359,9 @@ class MainWindowUI(QMainWindow):
     def _load_stylesheet(self):
         """加载样式表"""
         search_paths = [
-            "src/resources/styles/main_window.qss",
-            "resources/styles/main_window.qss",
-            ":/styles/main_window.qss"
+            "src/resources/styles/style_bule.qss",
+            "resources/styles/style_bule.qss",
+            ":/styles/style_bule.qss"
         ]
         
         for path in search_paths:

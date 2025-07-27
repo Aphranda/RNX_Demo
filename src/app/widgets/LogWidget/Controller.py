@@ -1,9 +1,10 @@
 import os
 import time
-from PyQt5.QtCore import QTimer, QObject, pyqtSignal, Qt
-from PyQt5.QtGui import QTextCursor, QTextDocument
+from pathlib import Path
+from PyQt5.QtCore import QTimer, QObject, pyqtSignal
+from PyQt5.QtGui import QTextCursor, QTextDocument, QIcon
 from datetime import datetime
-from PyQt5.QtWidgets import QFileDialog, QMessageBox, QWidget, QApplication
+from PyQt5.QtWidgets import QFileDialog, QMessageBox
 
 class LogWidgetController(QObject):
     """日志控件的业务逻辑控制器"""
@@ -156,42 +157,16 @@ class LogWidgetController(QObject):
         
         # 创建消息框并应用样式
         msg = QMessageBox()
-        
-        # 强制设置样式并更新
-        msg.setStyleSheet("""
-            QMessageBox {
-                background: #f7f7f7;
-                font-size: 24px;
-                font-weight: bold;
-            }
-            QMessageBox QLabel {
-                color: #222;
-                font-size: 24px;
-                font-weight: bold;
-            }
-            QMessageBox QPushButton {
-                background: #1976d2;
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 6px 18px;
-                font-size: 24px;
-                font-weight: bold;
-                min-width: 100px;
-            }
-            QMessageBox QPushButton:hover {
-                background: #1565c0;
-            }
-            QMessageBox QPushButton:pressed {
-                background: #0d47a1;
-            }
-        """)
-        
-        # 强制更新样式
-        msg.setAttribute(Qt.WA_StyledBackground)
-        for widget in msg.findChildren(QWidget):
-            widget.setAttribute(Qt.WA_StyledBackground)
-        
+        msg.setStyleSheet(self.view.styleSheet())
+
+        # 设置窗口图标
+        icon_path = "src/resources/icons/icon_RNX_01.ico"
+        if Path(icon_path).exists():
+            msg.setWindowIcon(QIcon(icon_path))
+        else:
+            print(f"警告: 图标文件未找到 - {icon_path}")
+
+
         # 设置消息框属性
         msg.setIcon(QMessageBox.Question)
         msg.setWindowTitle("确认删除过期日志")

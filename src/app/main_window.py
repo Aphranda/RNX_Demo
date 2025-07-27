@@ -1,6 +1,7 @@
 
-from PyQt5.QtCore import Qt, QMutex
+from PyQt5.QtCore import Qt, QMutex, QUrl
 from PyQt5.QtWidgets import QMessageBox
+from PyQt5.QtGui import QDesktopServices
 import sys, os
 
 # # 添加项目根目录到系统路径
@@ -36,6 +37,8 @@ class MainWindow(MainWindowUI):
         
         # 初始化控制器
         self._init_controller()
+
+
     
     # region 初始化方法
     def _init_status_cache(self):
@@ -84,6 +87,8 @@ class MainWindow(MainWindowUI):
         self.calibration_action.triggered.connect(self.show_calibration_panel)
         self.import_action.triggered.connect(self.merge_calibration_files) 
         self.help_action.triggered.connect(self.open_help_document)
+        self.plot_action.triggered.connect(self.show_plot_widget)
+        self.export_action.triggered.connect(self.open_code_link)
 
         # 状态栏初始信息
         self.show_status("系统就绪。")
@@ -163,6 +168,48 @@ class MainWindow(MainWindowUI):
             # 将校准面板置于前端
             self.calibration_panel.raise_()
             self.calibration_panel.activateWindow()
+
+    # 新增方法
+    def show_plot_widget(self):
+        """显示或隐藏绘图窗口"""
+        if self.plot_widget.isVisible():
+            self.plot_widget.hide()
+            self.plot_action.setText("数据绘图")
+        else:
+            self.plot_widget.show()
+            self.plot_widget.raise_()
+            self.plot_widget.activateWindow()
+            self.plot_action.setText("关闭绘图")
+    
+
+    def open_code_link(self):
+        """打开开源代码链接"""
+        # 定义开源代码链接
+        github_url = "https://github.com/Aphranda/RNX_Demo.git"
+        
+        # 创建询问对话框
+        reply = QMessageBox.question(
+            self,
+            "打开开源代码",
+            f"是否在浏览器中打开开源代码链接?\n{github_url}",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                # 使用QDesktopServices打开链接
+                QDesktopServices.openUrl(QUrl(github_url))
+                self.log(f"已打开浏览器访问: {github_url}", "INFO")
+            except Exception as e:
+                self.log(f"打开链接失败: {str(e)}", "ERROR")
+                QMessageBox.critical(
+                    self,
+                    "打开失败",
+                    f"无法打开链接:\n{str(e)}\n请手动访问: {github_url}"
+                )
+        else:
+            self.log("用户取消访问开源代码", "INFO")
 
 
     def merge_calibration_files(self):

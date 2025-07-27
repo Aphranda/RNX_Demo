@@ -3950,9 +3950,7 @@ if __name__ == "__main__":
     app.setApplicationName("RNX Quantum Antenna Test System")
     app.setApplicationDisplayName("RNX量子天线测试系统")
     
-    # # 加载样式表
-    # with open("style.qss", "r", encoding="utf-8") as f:
-    #     app.setStyleSheet(f.read())
+
     
     window = MainWindow()
     window.show()

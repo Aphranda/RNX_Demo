@@ -1,3 +1,4 @@
+from pathlib import Path
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QToolBar, QTextEdit, QComboBox,
     QLabel, QAction, QLineEdit, QMenu
@@ -22,6 +23,9 @@ class LogWidgetView(QWidget):
         super().__init__(parent)
         self._setup_ui()
         self._connect_internal_signals()
+        
+
+        self._load_stylesheet()
 
     def _setup_ui(self):
         """初始化UI组件"""
@@ -175,3 +179,20 @@ class LogWidgetView(QWidget):
         cursor.mergeCharFormat(format)
         cursor.setPosition(original_position)
         self.text_edit.setTextCursor(cursor)
+
+    def _load_stylesheet(self):
+        """加载样式表"""
+        search_paths = [
+            "src/resources/styles/style_bule.qss",
+            "resources/styles/style_bule.qss",
+            ":/styles/style_bule.qss"
+        ]
+        
+        for path in search_paths:
+            if Path(path).exists():
+                with open(path, 'r', encoding='utf-8') as f:
+                    self.setStyleSheet(f.read())
+                return
+        
+        print("警告: 使用嵌入式默认样式")
+        self.setStyleSheet("QMainWindow { background: #f0f0f0; }")
