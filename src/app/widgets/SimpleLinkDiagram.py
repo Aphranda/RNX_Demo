@@ -15,7 +15,7 @@ class SimpleLinkDiagram(QLabel):
         
         # 能量点配置
         self.energy_config = {
-            'point_count': 4,        # 能量点数量
+            'point_count': 3,        # 能量点数量
             'point_spacing': 0.08,   # 能量点间距(时间间隔)
             'point_size_range': (2, 3),  # 能量点大小范围(min, max)
             'point_alpha_range': (80, 200)  # 能量点透明度范围(min, max)
@@ -80,7 +80,7 @@ class SimpleLinkDiagram(QLabel):
         
         # 当能量点接近天线时(>0.95)开始辐射动画
         if self.animation_progress > 0.95 and self.source_on:  # 只有信号源开启时才显示辐射
-            self.radiation_progress = (self.radiation_progress + 0.1) % 1.0
+            self.radiation_progress = (self.radiation_progress + 0.15) % 1.0
         else:
             self.radiation_progress = 0
         self.update()
@@ -89,17 +89,15 @@ class SimpleLinkDiagram(QLabel):
         """设置链路模式并启动过渡动画"""
         normalized_link = link_mode.upper().replace("__", "_")
         
-        # 如果是第一次设置或相同链路，直接更新
-        if self.current_link is None or self.current_link == normalized_link:
-            self.current_link = normalized_link
-            self.update()
+        # 如果是相同链路，直接返回
+        if self.current_link == normalized_link:
             return
         
         # 启动过渡动画
         self.old_link = self.current_link
         self.new_link = normalized_link
         self.transition_progress = 0
-        self.current_link = normalized_link  # 立即更新当前链路，但保留旧链路用于过渡
+        self.current_link = normalized_link  # 立即更新当前链路
         
         # 启动过渡动画定时器
         if self.transition_timer:
@@ -116,6 +114,7 @@ class SimpleLinkDiagram(QLabel):
             self.transition_progress = 1
             self.transition_timer.stop()
             self.old_link = None
+            self.new_link = None
         
         self.update()
         
@@ -241,51 +240,49 @@ class SimpleLinkDiagram(QLabel):
             
             # 检查是否为旧链路
             is_old_link = self.old_link == link_key if self.old_link else False
-            old_alpha = int(255 * (1 - self.transition_progress))
-            
-            # 绘制旧链路连线（淡出效果）
-            if is_old_link and self.transition_progress < 1:
-                old_line_pen = QPen(highlight_color, 4)
-                old_line_pen.setColor(QColor(
-                    old_line_pen.color().red(),
-                    old_line_pen.color().green(),
-                    old_line_pen.color().blue(),
-                    old_alpha
-                ))
-                painter.setPen(old_line_pen)
-                painter.setBrush(Qt.NoBrush)
-                
-                path = QPainterPath()
-                path.moveTo(com_cx + signal_w//2, com_cy)
-                ctrl1_x = com_cx + 90
-                ctrl1_y = com_cy
-                ctrl2_x = antenna_x - 90
-                ctrl2_y = ny + antenna_h//2
-                path.cubicTo(
-                    QPointF(ctrl1_x, ctrl1_y),
-                    QPointF(ctrl2_x, ctrl2_y),
-                    QPointF(antenna_x - antenna_w//2, ny + antenna_h//2)
-                )
-                painter.drawPath(path)
-            
             # 检查是否为新链路
-            is_active = self.new_link == link_key if self.old_link else self.current_link == link_key
-            new_alpha = int(255 * self.transition_progress) if self.old_link else 255
+            is_new_link = self.new_link == link_key if self.new_link else False
+            # 检查是否为其他链路
+            is_other_link = not is_old_link and not is_new_link
+            
+            # 确定链路状态
+            is_active = False
+            if is_old_link or is_new_link:
+                # 在过渡状态中，只考虑新旧链路
+                is_active = True
+            else:
+                # 非过渡状态，检查是否当前链路
+                is_active = self.current_link == link_key
             
             # 绘制连线
-            line_pen = QPen(highlight_color if is_active else line_color, 
-                        4 if is_active else 2.5)
-            line_pen.setCapStyle(Qt.RoundCap)
-            
-            # 设置新链路的透明度
-            if self.old_link:
+            line_pen = None
+            if is_old_link:
+                # 旧链路：淡出效果
+                old_alpha = int(255 * (1 - self.transition_progress))
+                line_pen = QPen(highlight_color, 4)
+                line_pen.setColor(QColor(
+                    line_pen.color().red(),
+                    line_pen.color().green(),
+                    line_pen.color().blue(),
+                    old_alpha
+                ))
+            elif is_new_link:
+                # 新链路：淡入效果
+                new_alpha = int(255 * self.transition_progress)
+                line_pen = QPen(highlight_color, 4)
                 line_pen.setColor(QColor(
                     line_pen.color().red(),
                     line_pen.color().green(),
                     line_pen.color().blue(),
                     new_alpha
                 ))
+            else:
+                # 其他链路：正常显示
+                line_pen = QPen(highlight_color if is_active else line_color, 
+                            4 if is_active else 2.5)
             
+            # 应用连线样式
+            line_pen.setCapStyle(Qt.RoundCap)
             painter.setPen(line_pen)
             painter.setBrush(Qt.NoBrush)
             
@@ -358,6 +355,7 @@ class SimpleLinkDiagram(QLabel):
             horn_path.lineTo(antenna_left, flare_bottom)
             horn_path.closeSubpath()
 
+            # 天线颜色根据状态变化
             if is_active:
                 grad = QLinearGradient(antenna_left, antenna_top, 
                                     antenna_left + horn_width, antenna_top + horn_height)
