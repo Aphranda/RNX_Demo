@@ -89,7 +89,29 @@ class MainWindow(MainWindowUI):
         self.show_status("系统就绪。")
         self.log("系统启动。", "INFO")
 
+        # 清理日志
+        self._init_log_cleanup()
+
         # endregion
+
+    # 添加新的私有方法
+    def _init_log_cleanup(self):
+        """初始化日志清理功能"""
+        # 延迟执行，避免影响主界面加载
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(3000, self._check_and_clean_logs)
+
+    def _check_and_clean_logs(self):
+        """检查并清理过期日志"""
+        log_dir = "logs"  # 日志目录
+        days_to_keep = 7  # 保留最近7天的日志
+        
+        # 确保日志目录存在
+        if not os.path.exists(log_dir):
+            return
+        
+        # 调用日志控制器的清理方法
+        self.log_output.controller.clean_old_logs(log_dir, days_to_keep)
 
     # region 工具栏方法
 

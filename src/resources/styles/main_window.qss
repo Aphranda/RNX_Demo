@@ -354,6 +354,90 @@ QProgressBar:disabled::chunk {
     border: 1px solid #a0a0a0;
 }
 
+/* ===== QMessageBox 样式 ===== */
+QMessageBox {
+    background: #f7f7f7;
+    font-size: 24px;
+    font-weight: bold;
+}
+
+QMessageBox QLabel {
+    font-size: 24px;
+    color: #222;
+    font-weight: bold;
+}
+
+QMessageBox QPushButton {
+    background: #1976d2;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 18px;
+    font-size: 24px;
+    font-weight: bold;
+    min-height: 24px;
+    min-width: 100px;
+}
+
+QMessageBox QPushButton:hover {
+    background: #1565c0;
+}
+
+QMessageBox QPushButton:pressed {
+    background: #0d47a1;
+}
+
+/* 信息图标样式 */
+QMessageBox QLabel#qt_msgboxex_icon_label {
+    min-width: 48px;
+    min-height: 48px;
+}
+
+/* 详情文本样式 */
+QMessageBox QTextEdit {
+    border: 2px solid #b0b0b0;
+    border-radius: 8px;
+    padding: 6px 10px;
+    background: #f9f9f9;
+    font-size: 20px;
+    min-height: 24px;
+    font-weight: bold;
+    color: #222;
+}
+
+/* 不同类型的消息框样式 */
+QMessageBox[type="information"] {
+    background: #e3f2fd;
+}
+
+QMessageBox[type="warning"] {
+    background: #fff3e0;
+}
+
+QMessageBox[type="critical"] {
+    background: #ffebee;
+}
+
+QMessageBox[type="question"] {
+    background: #e8f5e9;
+}
+
+/* 日志窗口中的消息框特殊样式 */
+LogWidget QMessageBox {
+    font-size: 50px;
+}
+
+LogWidget QMessageBox QLabel {
+    font-size: 16px;
+}
+
+LogWidget QMessageBox QPushButton {
+    font-size: 16px;
+    min-width: 80px;
+    padding: 4px 12px;
+}
+
+
 /* 日志窗口中的进度条样式 */
 LogWidget QProgressBar {
     font-size: 14px;
