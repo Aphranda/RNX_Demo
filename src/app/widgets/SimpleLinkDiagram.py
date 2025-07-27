@@ -15,7 +15,7 @@ class SimpleLinkDiagram(QLabel):
         
         # 能量点配置
         self.energy_config = {
-            'point_count': 4,        # 能量点数量
+            'point_count': 3,        # 能量点数量
             'point_spacing': 0.08,   # 能量点间距(时间间隔)
             'point_size_range': (2, 3),  # 能量点大小范围(min, max)
             'point_alpha_range': (80, 200)  # 能量点透明度范围(min, max)
@@ -24,8 +24,7 @@ class SimpleLinkDiagram(QLabel):
         # 辐射效果配置
         self.radiation_config = {
             'angle_range': (-60, 60),  # 辐射角度范围(度)
-            'angle_step': 15,          # 辐射线角度步长(度)
-            'ring_count': 10,           # 同心圆环数量
+            'ring_count': 10,          # 同心圆环数量
             'ring_radius_range': (15, 80),  # 圆环半径范围(min, max)
             'ring_alpha_range': (40, 120)   # 圆环透明度范围(min, max)
         }
@@ -46,7 +45,7 @@ class SimpleLinkDiagram(QLabel):
         
         # 当能量点接近天线时(>0.95)开始辐射动画
         if self.animation_progress > 0.95 and self.source_on:  # 只有信号源开启时才显示辐射
-            self.radiation_progress = (self.radiation_progress + 0.1) % 1.0
+            self.radiation_progress = (self.radiation_progress + 0.15) % 1.0
         else:
             self.radiation_progress = 0
         self.update()
@@ -275,40 +274,55 @@ class SimpleLinkDiagram(QLabel):
                            Qt.AlignVCenter | Qt.AlignLeft, name)
             
             # ==================== 天线辐射效果 ====================
-            if is_active and self.radiation_progress > 0 and self.source_on:  # 只有信号源开启时才显示辐射
+            if is_active and self.radiation_progress > 0 and self.source_on:
                 # 使用配置参数计算辐射效果
                 min_radius, max_radius = self.radiation_config['ring_radius_range']
-                radius = min_radius + (max_radius - min_radius) * self.radiation_progress
+                ring_radius_step = (max_radius - min_radius) / self.radiation_config['ring_count']
                 
-                radiation_center = QPointF(antenna_left + horn_width, antenna_top + horn_height/2)
+                # 计算当前最外环半径（动画效果）
+                current_max_radius = min_radius + (max_radius - min_radius) * self.radiation_progress
                 
-                # 绘制辐射波(扇形)
-                start_angle, end_angle = self.radiation_config['angle_range']
+                # 计算辐射角度范围
+                start_angle = self.radiation_config['angle_range'][0]
+                end_angle = self.radiation_config['angle_range'][1]
                 angle_span = end_angle - start_angle
                 
-                for i in range(1, self.radiation_config['ring_count'] + 1):
-                    r = radius * (i / self.radiation_config['ring_count'])
+                # 绘制多个同心圆环
+                for i in range(self.radiation_config['ring_count']):
+                    # 计算当前圆环半径（从内到外）
+                    ring_radius = min_radius + i * ring_radius_step
+                    
+                    # 只绘制在动画范围内的圆环
+                    if ring_radius > current_max_radius:
+                        continue
+                        
+                    # 计算透明度（内环更明显，外环更透明）
                     min_alpha, max_alpha = self.radiation_config['ring_alpha_range']
-                    alpha = int(max_alpha * (1 - i / self.radiation_config['ring_count']))
+                    alpha = max_alpha - (max_alpha - min_alpha) * (ring_radius / max_radius)
                     
-                    painter.setPen(QPen(QColor(radiation_color.red(), radiation_color.green(), 
-                                    radiation_color.blue(), alpha), 2.0))
+                    # 计算圆环粗细（外环更细）
+                    ring_width = max(1, 3.0 - (ring_radius / max_radius) * 2.0)
                     
-                    # 绘制扇形
-                    path = QPainterPath()
-                    path.moveTo(radiation_center)
-                    path.arcTo(radiation_center.x() - r, radiation_center.y() - r, 
-                            r * 2, r * 2, 
-                            start_angle, angle_span)
-                    path.closeSubpath()
-                    painter.drawPath(path)
+                    # 设置画笔属性
+                    ring_color = QColor(radiation_color)
+                    ring_color.setAlpha(int(alpha))
+                    painter.setPen(QPen(ring_color, ring_width))
+                    painter.setBrush(Qt.NoBrush)
                     
-                    # 添加辐射线
-                    for angle in range(start_angle, end_angle, self.radiation_config['angle_step']):
-                        rad = math.radians(angle)
-                        end_x = radiation_center.x() + r * math.cos(rad)
-                        end_y = radiation_center.y() + r * math.sin(rad)
-                        painter.drawLine(radiation_center, QPointF(end_x, end_y))
+                    # 计算圆环位置
+                    ring_center = QPointF(antenna_left + horn_width, antenna_top + horn_height/2)
+                    
+                    # 创建圆环的边界矩形
+                    rect = QRectF(
+                        ring_center.x() - ring_radius, 
+                        ring_center.y() - ring_radius,
+                        ring_radius * 2, 
+                        ring_radius * 2
+                    )
+                    
+                    # 绘制部分圆环（只在辐射角度内可见）
+                    # Qt中的角度单位是1/16度，所以需要乘以16
+                    painter.drawArc(rect, int(start_angle * 16), int(angle_span * 16))
 
         painter.end()
     
