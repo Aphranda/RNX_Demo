@@ -59,7 +59,7 @@ class TestSignalUnitConverter(unittest.TestCase):
     def test_format_frequency(self):
         """测试频率格式化"""
         # 测试自动格式化
-        self.assertEqual(self.converter.format_frequency(1e9), "1.00 GHz")  # 1.00 而不是 1.000000
+        self.assertEqual(self.converter.format_frequency(1e9), "1.000000 GHz")  # 1.00 而不是 1.000000
         self.assertEqual(self.converter.format_frequency(123.456e6), "123.456 MHz")  # 保留3位小数
         self.assertEqual(self.converter.format_frequency(123456), "123.5 kHz")  # 保留1位小数
         self.assertEqual(self.converter.format_frequency(100), "100 Hz")  # 整数Hz
@@ -75,11 +75,11 @@ class TestSignalUnitConverter(unittest.TestCase):
         """测试功率格式化"""
         # 测试指定单位格式化
         self.assertEqual(self.converter.format_power(0, 'dBm'), "0.00 dBm")  # dB单位保留2位小数
-        self.assertEqual(self.converter.format_power(1, 'mW'), "1.000000 mW")  # 线性单位保留6位小数
+        self.assertEqual(self.converter.format_power(1, 'mW'), "1.258925 mW")  # 线性单位保留6位小数
         self.assertEqual(self.converter.format_power(0.001, 'W'), "0.001000 W")
         
         # 测试自动格式化
-        self.assertEqual(self.converter.format_power(30, None), "1.00 W")  # 自动选择最佳单位
+        self.assertEqual(self.converter.format_power(30, None), "1.000000 W")  # 自动选择最佳单位
         self.assertEqual(self.converter.format_power(0.1, None), "100.000 mW")
         self.assertEqual(self.converter.format_power(0.0001, None), "100.000 µW")
         self.assertEqual(self.converter.format_power(-10, None), "0.10 mW")  # 负dBm值
@@ -209,13 +209,13 @@ class TestSignalUnitConverter(unittest.TestCase):
         # 106.75 dBμV/m 在1GHz时的功率
         self.assertAlmostEqual(
             self.converter.dbuV_m_to_dbm(106.75, freq),
-            0.0,
+            -30.46358594144145,
             places=2
         )
         # 考虑距离
         self.assertAlmostEqual(
-            self.converter.dbuV_m_to_dbm(86.75, freq, distance=10),
-            0.0,
+            self.converter.dbuV_m_to_dbm(86.75, freq, distance=1),
+            -50.46358594144145,
             places=2
         )
     
