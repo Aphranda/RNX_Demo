@@ -160,8 +160,8 @@ class CalibrationFileManager:
         # 创建新校准文件
         # 构造基础参数
         base_param = {
-            'ref_power': default_meta['ref_power']['X'] if isinstance(default_meta['ref_power'], dict) else -15.0,
-            'polarization': 'Phi',
+            'ref_power': default_meta['ref_power']['X'] if isinstance(default_meta['ref_power'], dict) else -20.0,
+            'polarization': 'PHI',
             'distance': 1.0
         }
         self.create_new_calibration(
@@ -191,10 +191,10 @@ class CalibrationFileManager:
                 if i == points - 1:
                     freq = stop_ghz
                     
-                default_gain = 10
+                default_gain = 18
                 zero_data = {
                     'theta': default_gain, 'phi': default_gain,
-                    'horn_gain': default_gain,
+                    'horn_gain': 8,
                     'theta_corrected': default_gain, 'phi_corrected': default_gain,
                     'theta_corrected_vm': default_gain, 'phi_corrected_vm': default_gain
                 }
@@ -301,14 +301,40 @@ class CalibrationFileManager:
         - 如果极化相同且所有数据相同，则去重
         - 如果极化不同，则合并为双极化数据
         2. 不同频率或参考功率的数据点全部保留
+        3. 自动剔除已经被合并过的文件(通过检查!VersionNotes: Merged calibration file)
         """
         if not file_paths:
             raise ValueError("至少需要一个校准文件")
         
+        # 检查并剔除已合并的文件
+        filtered_file_paths = []
+        for filepath in file_paths:
+            try:
+                # 检查文件是否已经是合并文件
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if line.startswith('!VersionNotes:'):
+                            if 'Merged calibration file' in line:
+                                self.log(f"检测到已合并文件: {os.path.basename(filepath)}", "WARNING")
+                                self.log(f"跳过已合并的文件: {os.path.basename(filepath)}", "INFO")
+                                break
+                            else:
+                                filtered_file_paths.append(filepath)
+                                break
+                        elif not line.startswith('!'):  # 遇到数据行说明没有VersionNotes
+                            filtered_file_paths.append(filepath)
+                            break
+            except Exception as e:
+                self.log(f"检查文件{filepath}失败: {str(e)}", "WARNING")
+                continue
+        
+        if not filtered_file_paths:
+            raise ValueError("没有有效的校准文件可以合并")
+        
         # 加载所有文件数据
         all_data = []
         all_meta = []
-        for filepath in file_paths:
+        for filepath in filtered_file_paths:
             file_data = self.load_calibration_file(filepath)
             if file_data is None:
                 self.log(f"无法加载文件: {filepath}", "WARNING")
@@ -474,7 +500,7 @@ class CalibrationFileManager:
             equipment_meta=base_meta,
             freq_params=base_meta['freq_params'],
             base_param=base_meta['base_param'],
-            version_notes="Auto generated merged calibration file"
+            version_notes="Merged calibration file from multiple sources"
         )
         
         # 添加所有数据点
@@ -495,6 +521,7 @@ class CalibrationFileManager:
         archived_path = self.finalize_calibration("Merged calibration file from multiple sources")
         
         return archived_path
+
 
 
     def _generate_header(self) -> str:
@@ -573,25 +600,43 @@ class CalibrationFileManager:
             **data
         })
         
+        # 判断是否为合并文件
+        is_merged_file = "merged" in self.current_meta.get('version_notes', '').lower()
+        
         # 格式化数据行
-        data_row = (
-            f"{freq_ghz:.6f},"
-            f"{data.get('theta', 0.0):.2f},"
-            f"{data.get('phi', 0.0):.2f},"
-            f"{data.get('horn_gain', 0.0):.5f},"
-            f"{data.get('theta_corrected', 0.0):.2f},"
-            f"{data.get('phi_corrected', 0.0):.2f},"
-            f"{data.get('theta_corrected_vm', 0.0):.2f},"
-            f"{data.get('phi_corrected_vm', 0.0):.2f},"
-            f"{data.get('reference_power', 0.0):.2f},"
-            f"{data.get('polarization', 'DUAL')}\n"
-        )
+        if is_merged_file:
+            # 合并文件包含reference_power和polarization
+            data_row = (
+                f"{freq_ghz:.6f},"
+                f"{data.get('theta', 0.0):.2f},"
+                f"{data.get('phi', 0.0):.2f},"
+                f"{data.get('horn_gain', 0.0):.5f},"
+                f"{data.get('theta_corrected', 0.0):.2f},"
+                f"{data.get('phi_corrected', 0.0):.2f},"
+                f"{data.get('theta_corrected_vm', 0.0):.2f},"
+                f"{data.get('phi_corrected_vm', 0.0):.2f},"
+                f"{data.get('reference_power', 0.0):.2f},"
+                f"{data.get('polarization', 'DUAL')}\n"
+            )
+        else:
+            # 普通校准文件不包含这两个字段
+            data_row = (
+                f"{freq_ghz:.6f},"
+                f"{data.get('theta', 0.0):.2f},"
+                f"{data.get('phi', 0.0):.2f},"
+                f"{data.get('horn_gain', 0.0):.5f},"
+                f"{data.get('theta_corrected', 0.0):.2f},"
+                f"{data.get('phi_corrected', 0.0):.2f},"
+                f"{data.get('theta_corrected_vm', 0.0):.2f},"
+                f"{data.get('phi_corrected_vm', 0.0):.2f}\n"
+            )
         
         # 写入数据（线程安全）
         with self._file_lock, open(self.active_file, 'a', encoding='utf-8') as f:
             f.write(data_row)
         
         return True
+
 
 
 
@@ -972,14 +1017,19 @@ class CalibrationFileManager:
             if base_params_lines:
                 try:
                     # 尝试解析JSON，处理可能的格式问题
-                    base_params_str = base_params_lines[0].replace(",,","").replace('" ',"").split(":", 1)[1].strip().replace('""', '"')
+                    base_params_str = base_params_lines[0].split(':', 1)[1].strip()
 
                     # 处理可能的引号问题
                     if base_params_str.startswith('"') and base_params_str.endswith('"'):
                         base_params_str = base_params_str[1:-1]
                     # 尝试解析JSON
-                    base_params = json.loads(base_params_str)
-                    
+                    try:
+                        base_params = json.loads(base_params_str)
+                    except json.JSONDecodeError:
+                        self.log("检查校准参数是否被改动", "ERROR")
+                        base_params_str = base_params_str.replace(' "', '"').replace('",', ',').replace('""', '"').replace('}"', '}')
+                        base_params = json.loads(base_params_str)
+                        self.log("宽松解析成功", "DEBUG")
                     # 验证ref_power格式
                     if 'ref_power' in base_params:
                         ref_power = base_params['ref_power']
@@ -1140,7 +1190,7 @@ class CalibrationFileManager:
                     # 解析基础参数
                     elif line.startswith('!BaseParams:'):
                         try:
-
+                            
                             base_params_str = line.split(':', 1)[1].strip()
                             
                             # 处理可能的引号问题
@@ -1149,7 +1199,14 @@ class CalibrationFileManager:
                             # 处理可能的双引号转义
                             base_params_str = base_params_str.replace('\\"', '"').replace('""', '"')
                             # 解析JSON
-                            base_params = json.loads(base_params_str)
+                            
+                            try:
+                                base_params = json.loads(base_params_str)
+                            except json.JSONDecodeError:
+                                self.log("检查校准参数是否被改动", "ERROR")
+                                base_params_str = base_params_str.replace(' "', '"').replace('",', ',').replace('""', '"').replace('}"', '}')
+                                base_params = json.loads(base_params_str)
+                                self.log("宽松解析成功", "DEBUG")
                             if isinstance(base_params, dict):
                                 # 处理ref_power可能是列表的情况
                                 if 'ref_power' in base_params:
@@ -1166,15 +1223,7 @@ class CalibrationFileManager:
                                 meta['base_param'].update(base_params)
                         except json.JSONDecodeError as e:
                             self.log(f"基础参数JSON解析失败: {str(e)}", "WARNING")
-                            # 尝试更宽松的解析方式
-                            try:
-                                # 处理可能的格式问题
-                                base_params_str = base_params_str.replace('""', '"')
-                                base_params = json.loads(base_params_str)
-                                if isinstance(base_params, dict):
-                                    meta['base_param'].update(base_params)
-                            except json.JSONDecodeError:
-                                self.log("无法解析基础参数，使用默认值", "WARNING")
+                            self.log("无法解析基础参数，使用默认值", "WARNING")
                     
                     # 解析版本说明
                     elif line.startswith('!VersionNotes:'):
@@ -1251,8 +1300,6 @@ class CalibrationFileManager:
             # 更新实例变量
             self.current_meta = meta
             self.data_points = data_points
-            print(f"读取到的元数据: {meta}")  # 调试输出
-            print(f"读取到的数据点数量: {len(data_points)}")  # 调试输出
             return {
                 'meta': meta,
                 'data': data_points
