@@ -1,6 +1,6 @@
 
 from PyQt5.QtCore import Qt, QMutex, QUrl
-from PyQt5.QtWidgets import QMessageBox
+from PyQt5.QtWidgets import QMessageBox, QDialog, QVBoxLayout, QLabel, QTextEdit, QDialogButtonBox
 from PyQt5.QtGui import QDesktopServices
 import sys, os
 
@@ -89,6 +89,7 @@ class MainWindow(MainWindowUI):
         self.help_action.triggered.connect(self.open_help_document)
         self.plot_action.triggered.connect(self.show_plot_widget)
         self.export_action.triggered.connect(self.open_code_link)
+        self.settings_action.triggered.connect(self.show_software_info)
 
         # 状态栏初始信息
         self.show_status("系统就绪。")
@@ -119,6 +120,92 @@ class MainWindow(MainWindowUI):
         self.log_output.controller.clean_old_logs(log_dir, days_to_keep)
 
     # region 工具栏方法
+
+    # 新增方法: 展示软件信息
+    def show_software_info(self):
+        """显示软件信息对话框"""
+        # 创建自定义对话框
+        dialog = QDialog(self)
+        dialog.setWindowTitle("软件信息")
+        dialog.setMinimumWidth(600)
+        
+        # 设置对话框布局
+        layout = QVBoxLayout(dialog)
+        
+        # 软件信息
+        software_info = QLabel("<h2>RNX Quantum Antenna Test System</h2>")
+        software_info.setAlignment(Qt.AlignCenter)
+        layout.addWidget(software_info)
+        
+        # 版本信息
+        version_info = QLabel("<b>版本:</b> 2.1.0 (Build 2025.07.26)")
+        layout.addWidget(version_info)
+        
+        # 开发团队信息
+        team_info = QLabel("<b>开发团队:</b> GTS Wired Control Team")
+        layout.addWidget(team_info)
+        
+        # 制作人信息
+        author_info = QLabel("<b>电子工程师:</b> 董力")
+        layout.addWidget(author_info)
+        
+        # 公司信息
+        company_info = QLabel("<b>公司:</b> 深圳市通用测试系统有限公司")
+        layout.addWidget(company_info)
+        
+        # 地址信息
+        address_info = QLabel("<b>地址:</b> 深圳市南山区西丽街道创智云城A区7栋-8层")
+        layout.addWidget(address_info)
+        
+        # 联系方式
+        contact_info = QLabel("<b>技术支持:</b> li.dong@generaltest.com")
+        layout.addWidget(contact_info)
+        
+        # 版权信息
+        copyright_info = QLabel("<b>版权:</b> © 2025 GTS Technologies. 保留所有权利。")
+        layout.addWidget(copyright_info)
+        
+        # 添加分隔线
+        layout.addWidget(QLabel("<hr>"))
+        
+        # 系统信息
+        system_info = QLabel("<b>系统信息:</b>")
+        layout.addWidget(system_info)
+        
+        # 获取Python版本信息
+        import platform
+        python_version = f"Python {platform.python_version()}"
+        
+        # 获取PyQt版本信息
+        from PyQt5.Qt import PYQT_VERSION_STR
+        pyqt_version = f"PyQt {PYQT_VERSION_STR}"
+        
+        # 创建系统信息文本框
+        info_text = QTextEdit()
+        info_text.setReadOnly(True)
+        info_text.setPlainText(
+            f"操作系统: {platform.system()} {platform.release()}\n"
+            f"处理器: {platform.processor()}\n"
+            f"Python版本: {python_version}\n"
+            f"PyQt版本: {pyqt_version}\n"
+            f"安装路径: {os.path.abspath('.')}\n"
+            f"校准文件路径: {os.path.abspath('.')}/src/calibration\n"
+        )
+        layout.addWidget(info_text)
+        
+        # 添加确定按钮
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok)
+        button_box.accepted.connect(dialog.accept)
+        layout.addWidget(button_box)
+        
+        # 应用主窗口样式
+        if hasattr(self, 'styleSheet'):
+            dialog.setStyleSheet(self.styleSheet())
+        
+        # 显示对话框
+        dialog.exec_()
+        
+        self.log("查看软件信息", "INFO")
 
     def open_help_document(self):
         """打开帮助文档"""
