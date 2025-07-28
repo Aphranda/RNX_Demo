@@ -301,7 +301,7 @@ class MainWindowUI(QMainWindow):
         src_layout.addWidget(self.freq_query_btn, 0, 5)
         
         # 第二行 - 功率设置
-        src_layout.addWidget(QLabel("馈源功率:"), 1, 0)
+        src_layout.addWidget(QLabel("校准功率:"), 1, 0)
         src_layout.addWidget(self.power_input, 1, 1)
         src_layout.addWidget(self.raw_power_input, 1, 2)
         src_layout.addWidget(self.power_unit_combo, 1, 3)

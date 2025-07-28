@@ -110,7 +110,7 @@ class StatusPanelView(QWidget):
         self.raw_power_unit_combo = AutoFontSizeComboBox()
         self.src_grid.addWidget(self.raw_power_unit_combo, 1, 2)
 
-        self.src_grid.addWidget(QLabel("馈源功率:"), 2, 0)
+        self.src_grid.addWidget(QLabel("校准功率:"), 2, 0)
         self.src_power = AutoFontSizeLabel()
         self.src_power.setProperty("statusValue", True)
         self.src_grid.addWidget(self.src_power, 2, 1)

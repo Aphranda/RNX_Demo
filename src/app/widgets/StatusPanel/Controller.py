@@ -40,6 +40,8 @@ class StatusPanelController(QObject):
         # 状态更新标志
         self._update_motion = True
         self._update_source = True
+
+        self.freq_ghz = 0.0  # 当前频率(GHz)
         
         # 操作超时定时器
         self.operation_timeout = QTimer()
@@ -389,13 +391,13 @@ class StatusPanelController(QObject):
                 for key, value in status.items():
                     if key == 'freq':
                         formatted_status[key] = self._format_quantity(value, 'frequency')
+                        freq_str = status.get('freq', '0')
+                        self.freq_ghz = float(freq_str.replace('GHz', '').strip()) if 'GHz' in freq_str else float(freq_str)/1e9
                     elif key == 'raw_power':
                         # 获取当前频率
-                        freq_str = status.get('freq', '0')
                         try:
-                            freq_ghz = float(freq_str.replace('GHz', '').strip()) if 'GHz' in freq_str else float(freq_str)/1e9
                             # 应用补偿值
-                            compensation = self.get_compensation_value(freq_ghz)
+                            compensation = self.get_compensation_value(self.freq_ghz)
                             compensated_power = float(value) + compensation
                             formatted_status[key] = self._format_quantity(value, 'power', 'power')
                             # 同时更新原始功率

@@ -553,8 +553,9 @@ class MainWindow(MainWindowUI):
 
         # 获取信号源状态并更新链路图
         src_status = status.get("src", {})
-        rf_state = src_status.get("rf", "OFF").upper()  # 默认OFF状态
-        self.link_diagram.set_source_state(rf_state == "ON")  # 明确传递布尔值
+        if "rf" in src_status.keys():
+            rf_state = src_status.get("rf", "OFF").upper()  # 默认OFF状态
+            self.link_diagram.set_source_state(rf_state == "ON")  # 明确传递布尔值
 
         # 委托给StatusPanel处理更新逻辑
         self.status_panel._controller.update_motion_status(status.get("motion", {}))
@@ -674,23 +675,6 @@ class MainWindow(MainWindowUI):
         
         # 发送命令
         self.send_and_log(cmd)
-        
-        # 更新频率显示
-        min_freq, max_freq = {
-            "FEED_X_THETA": (8.0, 12.0),
-            "FEED_X_PHI": (8.0, 12.0),
-            "FEED_KU_THETA": (12.0, 18.0),
-            "FEED_KU_PHI": (12.0, 18.0),
-            "FEED_K_THETA": (18.0, 26.5),
-            "FEED_K_PHI": (18.0, 26.5),
-            "FEED_KA_THETA": (26.5, 40.0),
-            "FEED_KA_PHI": (26.5, 40.0)
-        }.get(link_mode, (8.0, 12.0))
-        
-        center_freq = (min_freq + max_freq) / 2
-        self.freq_input.setText(f"{center_freq:.3f}GHz")
-        self.log(f"频率联动: 自动设置为{center_freq}GHz ({link_mode})", "INFO")
-
     # endregion
 
     def is_valid_frequency(self, freq_str):
@@ -1151,7 +1135,6 @@ class MainWindow(MainWindowUI):
                 return
             # 获取当前频率，并且解析单位
             freq_str = self.status_cache["src"].get("freq", "0")
-            freq_str = "15 GHz" # 调试使用
             freq_ghz = float(freq_str.replace("GHz", "").strip()) if "GHz" in freq_str else float(freq_str)/1e9
 
             
