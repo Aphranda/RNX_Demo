@@ -53,6 +53,7 @@ class MainWindow(MainWindowUI):
         self.cal_manager = None
         self.current_feed_mode = None
         self._is_freq_link_connected = False
+        self.initing = False  # 初始化状态标志
     
     def _init_controller(self):
         """初始化控制器逻辑"""
@@ -457,6 +458,7 @@ class MainWindow(MainWindowUI):
         # 禁用按钮防止重复点击
         self.init_btn.setEnabled(False)
         self.update_init_button_style("initializing")
+        self.initing = True
                 
         try:
             self.log("开始系统初始化...", "INFO")
@@ -493,10 +495,12 @@ class MainWindow(MainWindowUI):
                 self.log("系统复位完成", "SUCCESS")
                 self.show_status("系统复位完成")
                 self.update_init_button_style("initialized")
+                self.initing = False
             else:
                 self.log("系统复位失败", "ERROR")
                 self.show_status("系统复位失败")
                 self.update_init_button_style("error")
+                self.initing = False
             
             # 恢复按钮可用状态
             self.init_btn.setEnabled(True)
@@ -556,7 +560,15 @@ class MainWindow(MainWindowUI):
         if "rf" in src_status.keys():
             rf_state = src_status.get("rf", "OFF").upper()  # 默认OFF状态
             self.link_diagram.set_source_state(rf_state == "ON")  # 明确传递布尔值
-
+        
+        # 判断初始化状态
+        motion_status = status.get("motion", {})
+        if "Z" in motion_status.keys():
+            z_home_status = motion_status["Z"].get("home", "-")
+            if z_home_status != "ALL OK":
+                if not self.initing:
+                    self.update_init_button_style("default")
+                    self.log("模组未初始化，运动操作已经关闭，请先进行系统初始化", "WARNING")
         # 委托给StatusPanel处理更新逻辑
         self.status_panel._controller.update_motion_status(status.get("motion", {}))
         self.status_panel._controller.update_src_status(status.get("src", {}))
