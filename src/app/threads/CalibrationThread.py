@@ -65,7 +65,6 @@ class CalibrationThread(QThread):
         self._is_running = True
         self._results = []
         total_points = len(self.freq_list)
-        print(self.freq_list, total_points)
         try:
             self._initialize_instruments()
             
