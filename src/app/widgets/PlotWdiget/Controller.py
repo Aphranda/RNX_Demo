@@ -13,6 +13,11 @@ class PlotController:
         # 连接视图信号
         self.view.import_action.triggered.connect(self.import_data)
         self.view.clear_action.triggered.connect(self.clear_plot)
+        self.view.series_visibility_changed.connect(self.handle_visibility_change)
+
+    def handle_visibility_change(self, series_name, visible):
+        """处理系列可见性变化"""
+        self.view.set_series_visibility(series_name, visible)
     
     def import_data(self):
         """导入数据文件"""
@@ -44,11 +49,11 @@ class PlotController:
             freq = point['freq']
             
             # 添加所有可用数据系列
-            plot_data['Theta'].append((freq, point.get('theta', 0.0)))
-            plot_data['Phi'].append((freq, point.get('phi', 0.0)))
-            plot_data['Theta_corrected'].append((freq, point.get('theta_corrected', 0.0)))
-            plot_data['Phi_corrected'].append((freq, point.get('phi_corrected', 0.0)))
-            plot_data['Horn_Gain'].append((freq, point.get('horn_gain', 0.0)))
+            plot_data['Theta(dBM)'].append((freq, point.get('theta', 0.0)))
+            plot_data['Phi(dBM)'].append((freq, point.get('phi', 0.0)))
+            plot_data['Theta_corrected(dBM)'].append((freq, point.get('theta_corrected', 0.0)))
+            plot_data['Phi_corrected(dBM)'].append((freq, point.get('phi_corrected', 0.0)))
+            plot_data['Horn_Gain(dBM)'].append((freq, point.get('horn_gain', 0.0)))
             
             # 添加V/M值系列
             if 'theta_corrected_vm' in point:

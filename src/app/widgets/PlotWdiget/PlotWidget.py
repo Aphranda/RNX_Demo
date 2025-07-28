@@ -15,8 +15,11 @@ class PlotWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(self._view)
         layout.setContentsMargins(0, 0, 0, 0)
-        
 
+    def set_series_visibility(self, name, visible):
+        """设置系列可见性"""
+        self._view.set_series_visibility(name, visible)
+        
     def plot_calibration_data(self, file_path=None):
         """绘制校准数据"""
         self.controller.load_and_plot(file_path)
