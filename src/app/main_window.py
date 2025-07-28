@@ -569,6 +569,16 @@ class MainWindow(MainWindowUI):
                 if not self.initing:
                     self.update_init_button_style("default")
                     self.log("模组未初始化，运动操作已经关闭，请先进行系统初始化", "WARNING")
+
+                    # 禁用频率联动选项框、复位按钮和达位按钮
+                    self.freq_feed_link_check.setEnabled(False)
+                    self.home_btn.setEnabled(False)
+                    self.feed_btn.setEnabled(False)
+            else:
+                # 系统已初始化，启用相关控件
+                self.freq_feed_link_check.setEnabled(True)
+                self.home_btn.setEnabled(True)
+                self.feed_btn.setEnabled(True)
         # 委托给StatusPanel处理更新逻辑
         self.status_panel._controller.update_motion_status(status.get("motion", {}))
         self.status_panel._controller.update_src_status(status.get("src", {}))

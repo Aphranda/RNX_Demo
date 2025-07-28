@@ -1,5 +1,5 @@
 from pathlib import Path
-from PyQt5.QtChart import QChart, QChartView, QLineSeries, QValueAxis
+from PyQt5.QtChart import QChart, QChartView, QLineSeries, QValueAxis, QSplineSeries
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QPen, QPainter
 from PyQt5.QtWidgets import (QVBoxLayout, QWidget, QToolBar, QAction, 
@@ -83,7 +83,8 @@ class PlotView(QWidget):
             if not points:
                 continue
                 
-            series = QLineSeries()
+            # 使用QSplineSeries代替QLineSeries实现平滑曲线
+            series = QSplineSeries()  # 修改为使用平滑曲线系列
             series.setName(name)
             
             # 添加数据点
