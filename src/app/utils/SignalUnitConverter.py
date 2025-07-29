@@ -1,7 +1,6 @@
 
 import math
-from typing import Dict, List, Optional, Tuple, Union
-from datetime import datetime, timezone
+from typing import Optional, Tuple, Union
 
 class SignalUnitConverter:
     """
@@ -17,10 +16,10 @@ class SignalUnitConverter:
     
     # 频率单位转换系数
     FREQ_UNITS = {
+        'GHz': 1e9,
         'Hz': 1,
         'kHz': 1e3,
         'MHz': 1e6,
-        'GHz': 1e9,
     }
     
     # 功率单位转换系数
@@ -38,7 +37,7 @@ class SignalUnitConverter:
         'V/m': 'V/m',
         'mV/m': 'mV/m',
         'uV/m': 'µV/m',
-        'dBV/m': 'dBV/m',
+        'dBuV/m': 'dBμV/m',
     }
 
     # 自由空间波阻抗 (Ω)
@@ -353,10 +352,10 @@ class SignalUnitConverter:
 
     def validate_power(self, power_str: str) -> Tuple[bool, float, str]:
         """
-        验证并解析功率字符串
+        验证并解析功率或电场强度字符串
         
         参数:
-            power_str: 功率字符串 (如 "10dBm", "-100 mW")
+            power_str: 输入字符串 (如 "10dBm", "-100 mW", "5V/m", "120 dBμV/m")
             
         返回:
             (是否有效, 数值, 单位)
@@ -370,6 +369,7 @@ class SignalUnitConverter:
         has_digit = False
         has_decimal = False
         has_dB = False
+        has_slash = False  # 检查是否有/符号，用于识别电场单位
         
         for c in power_str.strip():
             if c in '0123456789':
@@ -384,6 +384,9 @@ class SignalUnitConverter:
             elif c.lower() == 'd':
                 has_dB = True
                 unit_part.append(c)
+            elif c == '/':
+                has_slash = True
+                unit_part.append(c)
             else:
                 unit_part.append(c)
                 
@@ -393,27 +396,50 @@ class SignalUnitConverter:
         try:
             value = float(''.join(num_part))
             unit = ''.join(unit_part).strip()
-            
-            # 特殊处理dB/dBm/dBW
-            if has_dB:
-                if 'm' in unit.lower():
-                    unit = 'dBm'
-                elif 'w' in unit.lower():
-                    unit = 'dBW'
+            # 判断是否为电场强度单位
+            if has_slash or any(x in unit.lower() for x in ['v/m', 'μv/m', 'uv/m']):
+                # 处理电场强度单位
+                if has_dB:
+                    if 'v/m' in unit.lower() or 'μv/m' in unit.lower():
+                        unit = 'dBμV/m'
+                    else:
+                        unit = 'dBμV/m'  # 默认
                 else:
-                    unit = 'dBm'  # 默认dBm
-            else:
-                unit = self._normalize_power_unit(unit) if unit else self.default_power_unit
-            
-            # 放宽值范围检查
-            if unit in ('dBm', 'dBW'):
-                valid = -300 <= value <= 300  # 扩展范围
-            else:
-                valid = 0 <= value <= 1e12   # 扩展范围
+                    unit = self._normalize_efield_unit(unit) if unit else self.default_efield_unit
                 
+                # 电场强度值范围检查
+                if unit == 'V/m':
+                    valid = 0 <= value <= 1e6
+                elif unit == 'mV/m':
+                    valid = 0 <= value <= 1e9
+                elif unit == 'µV/m':
+                    valid = 0 <= value <= 1e12
+                elif unit == 'dBμV/m':
+                    valid = 0 <= value <= 240  # 约1MV/m
+                else:
+                    valid = False
+            else:
+                # 处理普通功率单位
+                if has_dB:
+                    if 'm' in unit.lower():
+                        unit = 'dBm'
+                    elif 'w' in unit.lower():
+                        unit = 'dBW'
+                    else:
+                        unit = 'dBm'  # 默认dBm
+                else:
+                    unit = self._normalize_power_unit(unit) if unit else self.default_power_unit
+                
+                # 功率值范围检查
+                if unit in ('dBm', 'dBW'):
+                    valid = -300 <= value <= 300  # 扩展范围
+                else:
+                    valid = 0 <= value <= 1e12   # 扩展范围
+                    
             return (valid, value, unit)
         except (ValueError, TypeError):
             return (False, 0.0, 'dBm')
+
 
     def _normalize_freq_unit(self, unit: str) -> str:
         """规范化频率单位"""
@@ -459,16 +485,18 @@ class SignalUnitConverter:
         return self.power_unit_colors.get(norm_unit, '#0078d7')
     
     def convert_efield(self, value: Union[str, float, int], 
-                    from_unit: str, to_unit: str,
-                    distance: float = 1.0) -> Tuple[float, str]:
+                     from_unit: str, to_unit: str,
+                     distance: float = 1.0,
+                     frequency: Optional[float] = None) -> Tuple[float, str]:
         """
-        电场强度单位转换（支持距离参数）
+        电场强度单位转换（支持距离和频率参数）
         
         参数:
             value: 输入场强值
             from_unit: 原单位 (V/m, mV/m, µV/m, dBμV/m, dBm)
             to_unit: 目标单位 (V/m, mV/m, µV/m, dBμV/m, dBm)
             distance: 测量距离 (米), 默认为1米
+            frequency: 频率 (Hz), 用于精确的dBm-dBμV/m转换
             
         返回:
             (转换后的值, 规范化后的单位)
@@ -484,26 +512,16 @@ class SignalUnitConverter:
         if from_unit == to_unit:
             return (efield_value, to_unit)
         
-        # 处理功率单位 (dBm/mW等) → 电场强度的转换
-        if from_unit in self.POWER_UNITS:
-            # 先将功率转换为dBm
-            power_dbm, _ = self.convert_power(efield_value, from_unit, 'dBm')
-            # 然后通过距离计算电场强度
-            efield_v_m = self.dbm_to_efield(power_dbm, distance)
-            # 最后转换到目标单位
-            print()
-            return self._convert_efield_inner(efield_v_m, 'V/m', to_unit)
+        # 如果有频率参数，使用精确转换公式
+        if frequency is not None and (from_unit == 'dBm' and to_unit == 'dBμV/m'):
+            converted = self.dbm_to_dbuV_m(efield_value, frequency, distance)
+            return (converted, to_unit)
+            
+        if frequency is not None and (from_unit == 'dBμV/m' and to_unit == 'dBm'):
+            converted = self.dbuV_m_to_dbm(efield_value, frequency, distance)
+            return (converted, to_unit)
         
-        # 处理电场强度 → 功率单位的转换
-        if to_unit in self.POWER_UNITS:
-            # 先统一转换为V/m
-            efield_v_m, _ = self._convert_efield_inner(efield_value, from_unit, 'V/m')
-            # 然后通过距离计算功率
-            power_dbm = self.efield_to_dbm(efield_v_m, distance)
-            # 最后转换到目标功率单位
-            return self.convert_power(power_dbm, 'dBm', to_unit)
-        
-        # 纯电场强度单位间的转换
+        # 其余情况使用原有转换逻辑
         return self._convert_efield_inner(efield_value, from_unit, to_unit)
 
     def _convert_efield_inner(self, value: float,
@@ -511,34 +529,32 @@ class SignalUnitConverter:
         """
         内部方法：处理纯电场强度单位间的转换
         """
-        # 全部转换为µV/m作为中间单位
+        # 全部转换为V/m作为中间单位
         if from_unit == 'V/m':
-            uV_m_value = value * 1e6
+            v_m_value = value
         elif from_unit == 'mV/m':
-            uV_m_value = value * 1e3
+            v_m_value = value * 1e-3
         elif from_unit == 'µV/m':
-            uV_m_value = value
+            v_m_value = value * 1e-6
         elif from_unit == 'dBμV/m':
-            uV_m_value = 10 ** (value / 20)
+            v_m_value = self.dbuV_m_to_v_m(value)
         else:
             return (value, from_unit)
         
-        # 从µV/m转换为目标单位
+        # 从V/m转换为目标单位
         if to_unit == 'V/m':
-            converted = uV_m_value / 1e6
+            converted = v_m_value
         elif to_unit == 'mV/m':
-            converted = uV_m_value / 1e3
+            converted = v_m_value * 1e3
         elif to_unit == 'µV/m':
-            converted = uV_m_value
+            converted = v_m_value * 1e6
         elif to_unit == 'dBμV/m':
-            try:
-                converted = 20 * math.log10(uV_m_value) if uV_m_value > 0 else -math.inf
-            except (ValueError, ZeroDivisionError):
-                converted = -math.inf
+            converted = self.v_m_to_dbuV_m(v_m_value)
         else:
             return (value, from_unit)
         
         return (converted, to_unit)
+
 
     def efield_to_power_density(self, efield: Union[str, float, int], 
                                efield_unit: str = 'V/m') -> Tuple[float, str]:
@@ -723,81 +739,146 @@ class SignalUnitConverter:
         norm_unit = self._normalize_efield_unit(unit)
         return self.efield_unit_colors.get(norm_unit, '#9b59b6')
 
-    def dbm_to_efield(self, dbm: float, distance: float = 1.0, antenna_gain: float = 1.0) -> float:
+    def dbuV_m_to_dbm(self, dbuV_m: float, frequency: float, distance: float = 1.0, antenna_gain: float = 1.0) -> float:
         """
-        将dBm转换为电场强度 (V/m)
+        将dBμV/m转换为dBm (公式逆运算)
         
         参数:
-            dbm: 发射功率 (dBm)
-            distance: 距离 (米), 默认为1米
-            antenna_gain: 天线增益 (无量纲), 默认为1 (各向同性天线)
-        
-        返回:
-            电场强度 (V/m)
-        """
-        # dBm → 功率 (W)
-        power_w = 10 ** (dbm / 10) * 1e-3
-        
-        # 功率密度 (W/m²)
-        power_density = (power_w * antenna_gain) / (4 * math.pi * distance ** 2)
-        
-        # 电场强度 (V/m)
-        efield = math.sqrt(power_density * self.Z0)
-        
-        return efield
-    
-    def efield_to_dbm(self, efield: float, distance: float = 1.0, antenna_gain: float = 1.0) -> float:
-        """
-        将电场强度 (V/m) 转换为 dBm
-        
-        参数:
-            efield: 电场强度 (V/m)
+            dbuV_m: 电场强度 (dBμV/m)
+            frequency: 频率 (Hz)
             distance: 距离 (米), 默认为1米
             antenna_gain: 天线增益 (无量纲), 默认为1
         
         返回:
             发射功率 (dBm)
         """
-        # 功率密度 (W/m²)
-        power_density = (efield ** 2) / self.Z0
+        # 计算波长 (米)
+        wavelength = 299792458 / frequency  # 光速 / 频率
         
-        # 功率 (W)
-        power_w = power_density * (4 * math.pi * distance ** 2) / antenna_gain
+        # 应用逆公式
+        dbm = dbuV_m + 20 * math.log10(wavelength) - 126.75
         
-        # W → dBm
-        dbm = 10 * math.log10(power_w * 1e3) if power_w > 0 else -math.inf
-        
+        # 考虑距离和天线增益的影响
+        if distance != 1.0:
+            dbm += 20 * math.log10(distance)
+        if antenna_gain != 1.0:
+            dbm -= 10 * math.log10(antenna_gain)
+            
         return dbm
-    def convert_power_with_distance(self, value: Union[str, float, int], 
-                                  from_unit: str, to_unit: str,
-                                  distance: float = 1.0) -> Tuple[float, str]:
+    
+    def dbm_to_dbuV_m(self, dbm: float, frequency: float, distance: float = 1.0, antenna_gain: float = 1.0) -> float:
         """
-        支持距离参数的功率单位转换
+        将dBm转换为dBμV/m (根据公式: EdBuV/m = Pr,dBm - 20*log10(波长) + 126.75)
         
         参数:
-            value: 输入值
-            from_unit: 原单位
-            to_unit: 目标单位
-            distance: 距离 (米)
-            
-        返回:
-            (转换后的值, 单位)
-        """
-        # 处理电场强度单位转换
-        if (from_unit in self.E_FIELD_UNITS and to_unit in self.POWER_UNITS) or \
-           (from_unit in self.POWER_UNITS and to_unit in self.E_FIELD_UNITS):
-            
-            # 功率 → 电场强度
-            if from_unit in self.POWER_UNITS:
-                power_dbm, _ = self.convert_power(value, from_unit, 'dBm')
-                efield = self.dbm_to_efield(power_dbm, distance)
-                return self.convert_efield(efield, 'V/m', to_unit)
-            
-            # 电场强度 → 功率
-            else:
-                efield_v_m, _ = self.convert_efield(value, from_unit, 'V/m')
-                dbm = self.efield_to_dbm(efield_v_m, distance)
-                return self.convert_power(dbm, 'dBm', to_unit)
+            dbm: 发射功率 (dBm)
+            frequency: 频率 (Hz)
+            distance: 距离 (米), 默认为1米
+            antenna_gain: 天线增益 (无量纲), 默认为1 (各向同性天线)
         
-        # 普通功率单位转换
-        return self.convert_power(value, from_unit, to_unit)
+        返回:
+            电场强度 (dBμV/m)
+        """
+        # 计算波长 (米)
+        wavelength = 299792458 / frequency  # 光速 / 频率
+        
+        # 应用公式
+        dbuV_m = dbm - 20 * math.log10(wavelength) + 126.75
+        
+        # 考虑距离和天线增益的影响
+        if distance != 1.0:
+            dbuV_m -= 20 * math.log10(distance)
+        if antenna_gain != 1.0:
+            dbuV_m += 10 * math.log10(antenna_gain)
+            
+        return dbuV_m
+    
+    def v_m_to_dbuV_m(self, v_m: float) -> float:
+        """
+        将 V/m 转换为 dBμV/m
+        
+        参数:
+            v_m: 电场强度 (V/m)
+        
+        返回:
+            电场强度 (dBμV/m)
+        
+        公式:
+            E,dBuV/m = 20*log10(E,V/m × 10^6)
+        """
+        try:
+            return 20 * math.log10(v_m * 1e6) if v_m > 0 else -math.inf
+        except (ValueError, ZeroDivisionError):
+            return -math.inf
+    
+    def dbuV_m_to_v_m(self, dbuV_m: float) -> float:
+        """
+        将 dBμV/m 转换为 V/m
+        
+        参数:
+            dbuV_m: 电场强度 (dBμV/m)
+        
+        返回:
+            电场强度 (V/m)
+        
+        公式:
+            E,V/m = 10^(E,dBuV/m / 20) / 10^6
+        """
+        try:
+            return 10 ** (dbuV_m / 20) * 1e-6 if dbuV_m > -math.inf else 0.0
+        except (ValueError, ZeroDivisionError):
+            return 0.0
+
+    def dbm_to_v_m(self, dbm: float, frequency: float, distance: float = 1.0, antenna_gain: float = 1.0) -> float:
+        """
+        将dBm转换为V/m
+        
+        参数:
+            dbm: 发射功率 (dBm)
+            frequency: 频率 (Hz)
+            distance: 距离 (米), 默认为1米
+            antenna_gain: 天线增益 (无量纲), 默认为1
+        
+        返回:
+            电场强度 (V/m)
+        
+        公式步骤:
+            1. 先将dBm转换为dBμV/m
+            2. 再将dBμV/m转换为V/m
+        """
+        # 先转换为dBμV/m
+        dbuV_m = self.dbm_to_dbuV_m(dbm, frequency, distance, antenna_gain)
+        # 再转换为V/m
+        return self.dbuV_m_to_v_m(dbuV_m)
+
+    def v_m_to_dbm(self, v_m: float, frequency: float, distance: float = 1.0, antenna_gain: float = 1.0) -> float:
+        """
+        将V/m转换为dBm
+        
+        参数:
+            v_m: 电场强度 (V/m)
+            frequency: 频率 (Hz)
+            distance: 距离 (米), 默认为1米
+            antenna_gain: 天线增益 (无量纲), 默认为1
+        
+        返回:
+            发射功率 (dBm)
+        
+        公式步骤:
+            1. 先将V/m转换为dBμV/m
+            2. 再将dBμV/m转换为dBm
+        """
+        # 先转换为dBμV/m
+        dbuV_m = self.v_m_to_dbuV_m(v_m)
+        # 再转换为dBm
+        return self.dbuV_m_to_dbm(dbuV_m, frequency, distance, antenna_gain)
+
+
+if __name__ == '__main__':
+    converter = SignalUnitConverter()
+    data1 = converter.dbm_to_dbuV_m(-17.57,18.04*1e9,1,1)
+    print(data1)
+    data2 = converter.dbuV_m_to_v_m(data1)
+    print(data2)
+    data3 = converter.dbm_to_v_m(-17.57,18.04*1e9,1,1)
+    print(data3)

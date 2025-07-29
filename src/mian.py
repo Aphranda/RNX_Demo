@@ -1,32 +1,26 @@
 from PyQt5.QtWidgets import (
-    QMainWindow, QApplication, QStatusBar, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QComboBox, QLineEdit, QTextEdit, QGroupBox, QGridLayout, 
-    QSizePolicy, QMessageBox, QCheckBox, QToolBar, QAction, QFileDialog
+    QApplication
 )
-from PyQt5.QtGui import QFont, QColor, QPainter, QPen, QFontMetrics, QTextCursor, QTextCharFormat, QIcon
-from PyQt5.QtCore import Qt, QPointF, QThread, pyqtSignal, QMutex
-from PyQt5.QtGui import QRegExpValidator
-from PyQt5.QtCore import QRegExp
-import sys, os, psutil
-import socket, select
-import datetime
-import time
-import atexit
-import hashlib
-import shutil
-import json, struct
-import math
-from typing import Dict, List, Optional, Tuple, Union
-from datetime import datetime, timezone
+from PyQt5.QtCore import QDir
 
+
+# 1. 设置项目路径
+import numpy as np
+import pandas as pd
+import pyvisa as visa
+import scipy
+import sys
+from pathlib import Path
+
+# 将项目根目录加入系统路径
+BASE_DIR = Path(__file__).parent.parent
+sys.path.append(str(BASE_DIR))
 
 from app.core.tcp_client import TcpClient
 from app.main_window import MainWindow
 from app.utils.ProcessManager import ProcessManager
 from app.utils.SignalUnitConverter import SignalUnitConverter
 from app.controllers.CalibrationFileManager import CalibrationFileManager
-
-
 
 if __name__ == "__main__":
     # 先检查是否已有实例运行
@@ -40,14 +34,13 @@ if __name__ == "__main__":
     
     # 正常启动主程序
     app = QApplication(sys.argv)
+
+    # 初始化资源系统
+    QDir.addSearchPath('resources', 'resources')  # 添加资源搜索路径
     
     # 设置应用程序名称（用于任务管理器识别）
     app.setApplicationName("RNX Quantum Antenna Test System")
     app.setApplicationDisplayName("RNX量子天线测试系统")
-    
-    # # 加载样式表
-    # with open("style.qss", "r", encoding="utf-8") as f:
-    #     app.setStyleSheet(f.read())
     
     window = MainWindow(communicator,unit_converter,calibrationFileManager)
     window.show()

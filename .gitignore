@@ -11,8 +11,10 @@ build/
 .eggs/
 *.log
 *.spec
-*.csv*
 *.bin
+*.xlsx
+*.lock
+*.exe
 
 # VSCode
 .vscode/
@@ -51,3 +53,4 @@ coverage.xml
 *.py,cover
 
 # 本地配置
+docs/英联标准增益18-40GHz.xls
