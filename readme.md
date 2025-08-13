@@ -16,6 +16,8 @@ RNX_Demo
 │     ├─ 📄RNX_Cal_THETA_RefPwr-10.0dBm_8.0to12.0GHz_step0.1_20250728_091457Z.csv
 │     ├─ 📄RNX_Cal_THETA_RefPwr-5.0dBm_12.0to18.0GHz_step0.1_20250728_091812Z.csv
 │     └─ 📄RNX_Cal_THETA_RefPwr-5.0dBm_26.5to40.0GHz_step0.1_20250728_093939Z.csv
+├─ 📁config
+│  └─ 📄instrument_commands.json
 ├─ 📁dist
 ├─ 📁docs
 │  ├─ 📄12_18GHZ.csv
@@ -58,6 +60,7 @@ RNX_Demo
 │  │  │  ├─ 📄tcp_client.py
 │  │  │  └─ 📄threads.py
 │  │  ├─ 📁dialogs
+│  │  │  ├─ 📄instrument_config_dialog.py
 │  │  │  └─ 📄__init__.py
 │  │  ├─ 📁instruments
 │  │  │  ├─ 📁__pycache__
