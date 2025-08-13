@@ -8,15 +8,31 @@ from app.instruments.interfaces import PowerSensor
 
 
 class NRP50S(PowerSensor):
-    def __init__(self, visa_address: str, timeout: int = 5000):
+    def __init__(self, visa_address: str, timeout: int = 5000, config: dict = None):
+        """
+        初始化功率计
+        Args:
+            visa_address: VISA资源地址
+            timeout: 通信超时(ms)
+            config: 仪器配置字典
+        """
         super().__init__(visa_address)
         self._inst.timeout = timeout
+        self._config = config or {}
+
+        # 从配置中获取规格参数
+        self.MIN_FREQ = float(self._config.get("min_freq", 10e6))    # 默认10 MHz
+        self.MAX_FREQ = float(self._config.get("max_freq", 50e9))    # 默认50 GHz
+        self.MIN_POWER = float(self._config.get("min_power", -70))   # 默认-70 dBm
+        self.MAX_POWER = float(self._config.get("max_power", 20))    # 默认20 dBm
+
         self._model = "NRP50S"
         self._serial_number = self._parse_serial_number()
         
         # 加载指令配置
         self._commands = self._load_commands()
         self.initialize_device()
+
 
     def _parse_serial_number(self) -> str:
         """从IDN响应中解析序列号"""
@@ -27,7 +43,10 @@ class NRP50S(PowerSensor):
             return "UNKNOWN"
 
     def _load_commands(self) -> dict:
-        """从JSON文件加载指令配置"""
+        """从JSON文件或传入配置加载指令配置"""
+        if self._config and "commands" in self._config:
+            return self._config["commands"]
+        
         try:
             config_path = Path(__file__).parent.parent.parent / "config" / "instrument_commands.json"
             with open(config_path, 'r', encoding='utf-8') as f:
@@ -49,6 +68,7 @@ class NRP50S(PowerSensor):
                 "fetch_power": "FETC?",
                 "get_errors": "SYST:ERR?"
             }
+
 
     def initialize_device(self):
         """使用配置的指令初始化设备"""

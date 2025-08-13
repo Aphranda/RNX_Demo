@@ -1,5 +1,9 @@
 {
     "PLASG-T8G40G": {
+        "min_freq": 100000,
+        "max_freq": 40000000000,
+        "min_power": -40,
+        "max_power": 0,
         "commands": {
             "reset": "*RST",
             "clear_status": "*CLS",
@@ -25,6 +29,10 @@
         }
     },
     "NRP50S": {
+        "min_freq": 10000000,
+        "max_freq": 50000000000,
+        "min_power": -70,
+        "max_power": 20,
         "commands": {
             "reset": "*RST",
             "clear_status": "*CLS",

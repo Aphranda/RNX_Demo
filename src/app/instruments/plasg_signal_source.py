@@ -14,26 +14,31 @@ from app.core.exceptions.instrument import SignalSourceError
 class PlasgT8G40G(SignalSource):
     """PLASG-T8G40G 信号发生器实现类"""
     
-    # 仪器规格常量
-    MIN_FREQ = 100e3  # 100 kHz
-    MAX_FREQ = 40e9   # 40 GHz
-    MIN_POWER = -120  # -120 dBm
-    MAX_POWER = 20    # 20 dBm
-    
-    def __init__(self, visa_address: str, timeout: int = 3000):
+    def __init__(self, visa_address: str, timeout: int = 3000, config: dict = None):
         """
         初始化信号源
         Args:
             visa_address: VISA资源地址
             timeout: 通信超时(ms)
+            config: 仪器配置字典
         """
         super().__init__(visa_address)
         self._inst.timeout = timeout
+        self._config = config or {}
         self._calibration = {
             'freq_offset': 0.0,
             'power_offset': 0.0,
             'power_factor': 1.0
         }
+
+        # 从配置中获取规格参数，如果没有则使用默认值
+        self.MIN_FREQ = float(self._config.get("min_freq", 100e3))  # 默认100 kHz
+        self.MAX_FREQ = float(self._config.get("max_freq", 40e9))   # 默认40 GHz
+        self.MIN_POWER = float(self._config.get("min_power", -40)) # 默认-40 dBm
+        self.MAX_POWER = float(self._config.get("max_power", 0))   # 默认0 dBm
+
+        # 加载调制命令
+        self._mod_commands = self._config.get("modulation_commands", {})
 
         # 添加模型和序列号属性
         self._model = "PLASG-T8G40G"
@@ -52,7 +57,10 @@ class PlasgT8G40G(SignalSource):
             return "UNKNOWN"
 
     def _load_commands(self) -> Dict:
-        """从JSON文件加载指令配置"""
+        """从JSON文件或传入配置加载指令配置"""
+        if self._config and "commands" in self._config:
+            return self._config["commands"]
+        
         try:
             config_path = Path(__file__).parent.parent.parent / "config" / "instrument_commands.json"
             with open(config_path, 'r', encoding='utf-8') as f:
@@ -72,6 +80,7 @@ class PlasgT8G40G(SignalSource):
                 "get_output": ":OUTP:STATE?",
                 "get_errors": ":SYST:ERR?"
             }
+
 
     def _initialize_device(self):
         """初始化设备设置"""
@@ -218,7 +227,14 @@ class PlasgT8G40G(SignalSource):
         mod_type = mod_type.upper()
         if mod_type not in ["AM", "FM", "PM", "PULSE"]:
             raise ValueError("无效的调制类型")
-        cmd = self._commands["set_modulation"].format(mod_type=mod_type, state="ON" if state else "OFF")
+        
+        if "set_modulation" not in self._mod_commands:
+            raise NotImplementedError("该设备不支持调制功能")
+            
+        cmd = self._mod_commands["set_modulation"].format(
+            mod_type=mod_type, 
+            state="ON" if state else "OFF"
+        )
         self._inst.write(cmd)
 
     @property

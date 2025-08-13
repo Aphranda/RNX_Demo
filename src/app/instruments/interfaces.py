@@ -4,12 +4,17 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 class VisaInstrument(ABC):
-    """所有VISA设备的基类"""
-    def __init__(self, visa_address: str):
+    def __init__(self, visa_address: str, config: dict = None):
         self.rm = visa.ResourceManager()
         self._inst = self.rm.open_resource(visa_address)
         self._inst.timeout = 3000  # 默认3秒超时
-
+        self._config = config or {}
+        
+        # 公共规格参数
+        self.MIN_FREQ = float(self._config.get("min_freq", 0))
+        self.MAX_FREQ = float(self._config.get("max_freq", 0))
+        self.MIN_POWER = float(self._config.get("min_power", 0))
+        self.MAX_POWER = float(self._config.get("max_power", 0))
     @property
     @abstractmethod
     def model(self) -> str:

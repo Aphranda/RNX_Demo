@@ -81,6 +81,7 @@ class InstrumentFactory:
             return PlasgT8G40G(visa_address, config=info.get('config', {}))
         return None
 
+
     @classmethod
     def create_power_meter(cls, visa_address: str, instrument_name: str = None) -> Optional[PowerSensor]:
         """创建功率计实例"""
@@ -94,6 +95,7 @@ class InstrumentFactory:
         elif info and "NRP" in info.get('model', ''):
             return NRP50S(visa_address, config=info.get('config', {}))
         return None
+
 
     @classmethod
     def get_available_instruments(cls) -> Dict[str, str]:
