@@ -49,7 +49,11 @@ class CalibrationView(QWidget):
         self.power_meter_status = QLabel("功率计: 未连接")
         self.signal_gen_status = QLabel("信号源: 未连接")
         self.btn_auto_detect = QPushButton("自动\n检测")  # 移动到这里
+        self.btn_auto_detect.setToolTip("自动检索仪表")
         self.btn_auto_detect.setFixedWidth(80)
+        self.btn_config_instruments = QPushButton("配置\n仪表")  # 新增配置按钮
+        self.btn_config_instruments.setFixedWidth(80)
+        self.btn_config_instruments.setToolTip("配置仪表参数")
 
         # 天线信息部分 - 添加导入增益按钮
         self.antenna_model = QLineEdit("RNX_ANT")
@@ -67,7 +71,7 @@ class CalibrationView(QWidget):
         self.power_meter_name = QLineEdit("NRP50S")  # 新增功率计名称输入
         self.power_meter_name.setPlaceholderText("功率计型号(如NRP50S)")
         self.signal_gen_address = QLineEdit("TCPIP0::192.168.1.10::inst0::INSTR")
-        self.power_meter_address = QLineEdit("TCPIP0::192.168.1.11::inst0::INSTR")
+        self.power_meter_address = QLineEdit("USB0::0x0AAD::0x0161::101636::INSTR")
         self.btn_connect = QPushButton("连接仪器")
         
         # 频率模式选择
@@ -137,7 +141,13 @@ class CalibrationView(QWidget):
         status_layout.addWidget(self.power_meter_status)
         status_layout.addWidget(self.signal_gen_status)
         device_layout.addLayout(status_layout)
-        device_layout.addWidget(self.btn_auto_detect)  # 将自动检测按钮添加到右侧
+        
+        # 按钮布局
+        button_layout = QHBoxLayout()
+        button_layout.addWidget(self.btn_auto_detect)
+        button_layout.addWidget(self.btn_config_instruments)  # 添加配置按钮
+        device_layout.addLayout(button_layout)
+        
         self.device_group.setLayout(device_layout)
 
         # 天线信息布局 - 水平布局

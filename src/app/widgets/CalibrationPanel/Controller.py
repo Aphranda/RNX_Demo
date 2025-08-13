@@ -2,6 +2,8 @@
 import pandas as pd
 from typing import List, Dict
 from scipy.interpolate import interp1d
+import json
+from pathlib import Path
 
 from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QMessageBox, QFileDialog
@@ -53,6 +55,7 @@ class CalibrationController(QObject):
         self._view.btn_import.clicked.connect(self._import_freq_list)
         self._view.range_mode.toggled.connect(self._update_mode_ui)
         self._view.btn_import_gain.clicked.connect(self._import_antenna_gain)
+        self._view.btn_config_instruments.clicked.connect(self._on_config_instruments)
 
         # 连接校准服务信号
         self.calibration_triggered.connect(self._start_calibration_process)
@@ -67,7 +70,26 @@ class CalibrationController(QObject):
         if self._log_callback:
             self._log_callback(message, level)
 
-  
+    def _on_config_instruments(self):
+        """处理仪表配置按钮点击"""
+        try:
+            # 获取配置文件路径
+            config_path = Path("src/config/instrument_commands.json")
+            
+            # 确保配置文件存在
+            if not config_path.exists():
+                config_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(config_path, 'w') as f:
+                    json.dump({}, f)  # 创建空配置文件
+            
+            # 创建并显示配置对话框
+            from app.dialogs.instrument_config_dialog import InstrumentConfigDialog
+            dialog = InstrumentConfigDialog(str(config_path), self._view)
+            dialog.exec_()
+            
+        except Exception as e:
+            self._log(f"打开仪表配置失败: {str(e)}", "ERROR")
+            QMessageBox.critical(self._view, "错误", f"打开仪表配置失败:\n{str(e)}")
     
     # region 仪器连接相关方法
     def _on_connect(self):
