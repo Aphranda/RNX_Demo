@@ -1,16 +1,21 @@
 # app/instruments/nrp50s.py
+import json
 import time
+from pathlib import Path
+from typing import Optional
+
 from app.instruments.interfaces import PowerSensor
+
 
 class NRP50S(PowerSensor):
     def __init__(self, visa_address: str, timeout: int = 5000):
-        super().__init__(visa_address)  # 调用基类初始化，已经创建self._inst
-        self._inst.timeout = timeout  # 设置超时
-
-        # 添加模型和序列号属性
-        self._model = "NRP50S"  # 改为实例变量
+        super().__init__(visa_address)
+        self._inst.timeout = timeout
+        self._model = "NRP50S"
         self._serial_number = self._parse_serial_number()
-
+        
+        # 加载指令配置
+        self._commands = self._load_commands()
         self.initialize_device()
 
     def _parse_serial_number(self) -> str:
@@ -21,83 +26,83 @@ class NRP50S(PowerSensor):
         except:
             return "UNKNOWN"
 
+    def _load_commands(self) -> dict:
+        """从JSON文件加载指令配置"""
+        try:
+            config_path = Path(__file__).parent.parent.parent / "config" / "instrument_commands.json"
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                return config.get(self._model, {}).get("commands", {})
+        except Exception as e:
+            print(f"加载指令配置失败: {str(e)}")
+            # 提供默认指令作为后备
+            return {
+                "reset": "*RST",
+                "clear_status": "*CLS",
+                "set_power_unit": "UNIT:POW DBM",
+                "set_continuous_mode": "INIT:CONT ON",
+                "set_auto_averaging": "SENS:AVER:AUTO ON",
+                "initiate": "INIT",
+                "set_frequency": "SENS:FREQ {freq_hz}",
+                "set_frequency_correction": "SENS:FREQ:CORR {offset_db}",
+                "set_averaging": "SENS:AVER:COUN {count}",
+                "fetch_power": "FETC?",
+                "get_errors": "SYST:ERR?"
+            }
+
+    def initialize_device(self):
+        """使用配置的指令初始化设备"""
+        try:
+            self._inst.write(self._commands["clear_status"])
+            self._inst.write(self._commands["reset"])
+            self._inst.write(self._commands["set_power_unit"])
+            self._inst.write(self._commands["set_continuous_mode"])
+            self._inst.write(self._commands["set_auto_averaging"])
+            self._inst.write(self._commands["initiate"])
+            time.sleep(0.5)
+        except Exception as e:
+            self.log_error(f"Initialization failed: {str(e)}")
+
     def set_frequency_correction(self, offset_db: float):
         """实现接口方法"""
-        self._inst.write(f"SENS:FREQ:CORR {offset_db}")
+        cmd = self._commands["set_frequency_correction"].format(offset_db=offset_db)
+        self._inst.write(cmd)
 
     def set_averaging(self, count: int):
         """实现接口方法"""
         if not 1 <= count <= 1000:
             raise ValueError("平均次数必须在1-1000之间")
-        self._inst.write(f"SENS:AVER:COUN {count}")
+        cmd = self._commands["set_averaging"].format(count=count)
+        self._inst.write(cmd)
 
-    @classmethod
-    def is_nrp_device(cls, idn: str) -> bool:
-        """检查是否是NRP系列功率计"""
-        parts = idn.split(',')
-        return (len(parts) >= 2 and 
-                parts[0].upper() == "ROHDE&SCHWARZ" and 
-                parts[1].upper().startswith("NRP"))
-    
-    def initialize_device(self):
-        """Initialize device: clear errors, reset, set units and continuous mode"""
-        try:
-            self._inst.write("*CLS")
-            self._inst.write("*RST")
-            self._inst.write("UNIT:POW DBM")   # Set units to dBm
-            self._inst.write("INIT:CONT ON")   # Continuous measurement mode
-            self._inst.write("SENS:AVER:AUTO ON")  # Enable auto-averaging
-            self._inst.write("INIT")
-            time.sleep(0.5)
-        except Exception as e:
-            self.log_error(f"Initialization failed: {str(e)}")
-    
-    def measure_power(self, freq_ghz: float = None) -> float:
+    def measure_power(self, freq_hz: Optional[float] = None) -> float:
         """
-        Measure power with optional frequency setting
-        
+        测量功率
         Args:
-            freq_ghz: Frequency in GHz (optional)
-            
+            freq_hz: 频率(Hz)，可选
         Returns:
-            Measured power in dBm
+            测量功率值(dBm)
         """
         try:
-            # Set frequency if provided
-            if freq_ghz is not None:
-                # Convert GHz to Hz (instrument expects Hz)
-                self._inst.write(f"SENS:FREQ {freq_ghz * 1e9}")
+            if freq_hz is not None:
+                cmd = self._commands["set_frequency"].format(freq_hz=freq_hz)
+                self._inst.write(cmd)
             
-            # Fetch power measurement
-            value = self._inst.query("FETC?").strip()
+            cmd = self._commands["fetch_power"]
+            value = self._inst.query(cmd).strip()
             return float(value)
         except Exception as e:
             self.log_error(f"Power measurement failed: {str(e)}")
             return float('nan')
-    
+
     def reset(self):
-        """Reset instrument to default state"""
-        try:
-            self._inst.write("*RST")
-            self.initialize_device()
-        except Exception as e:
-            self.log_error(f"Reset failed: {str(e)}")
-    
-    def close(self):
-        """Close instrument connection"""
-        try:
-            if hasattr(self, '_inst') and self._inst:
-                self._inst.close()
-        except Exception as e:
-            self.log_error(f"Close connection failed: {str(e)}")
-    
+        """重置设备"""
+        self._inst.write(self._commands["reset"])
+        self.initialize_device()
+
     def log_error(self, message: str):
-        """Log error message (placeholder for actual logging implementation)"""
+        """记录错误信息"""
         print(f"[NRP50S ERROR] {message}")
-    
-    def __del__(self):
-        """Destructor to ensure resources are released"""
-        self.close()
 
     @property
     def model(self) -> str:
@@ -109,24 +114,11 @@ class NRP50S(PowerSensor):
         """设备序列号（只读）"""
         return self._serial_number
 
+    def close(self):
+        """关闭设备连接"""
+        if hasattr(self, '_inst') and self._inst:
+            self._inst.close()
 
-
-# Test function when run directly
-if __name__ == "__main__":
-    sensor = NRP50S(visa_address="USB0::0x0AAD::0x0161::101636::INSTR")
-    
-    # Set measurement parameters
-    freq_ghz = 10.0  # 10 GHz
-    print(f"Setting frequency to {freq_ghz} GHz")
-    sensor.measure_power(freq_ghz=freq_ghz)
-    
-    # Perform measurement
-    start_time = time.time()
-    power = sensor.measure_power()
-    elapsed = (time.time() - start_time) * 1000  # ms
-    
-    print(f"Measured power: {power:.2f} dBm")
-    print(f"Measurement time: {elapsed:.2f} ms")
-    
-    # Close connection
-    sensor.close()
+    def __del__(self):
+        """析构函数确保资源释放"""
+        self.close()

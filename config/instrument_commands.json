@@ -1,0 +1,42 @@
+{
+    "PLASG-T8G40G": {
+        "commands": {
+            "reset": "*RST",
+            "clear_status": "*CLS",
+            "set_frequency": ":FREQ {freq_hz:.3f}Hz",
+            "get_frequency": ":FREQ?",
+            "set_power": ":POW {power_dbm:.2f}dBm",
+            "get_power": ":POW?",
+            "set_output": ":OUTP:STATE {state}",
+            "get_output": ":OUTP:STATE?",
+            "set_sweep_mode": ":FUNC:MODE SWEP",
+            "set_sweep_type": ":STYLSWEP:TYPE {type}",
+            "set_sweep_start": ":STYLSWEP:START {start_hz}Hz",
+            "set_sweep_stop": ":STYLSWEP:STOP {stop_hz}Hz",
+            "set_sweep_step": ":STYLSWEP:STEP {step_hz}Hz",
+            "set_sweep_dwell": ":STYLSWEP:DWELL {dwell_ms}ms",
+            "set_sweep_mode_auto": ":STYLSWEP:MODE AUTO",
+            "set_sweep_state": ":STYLSWEP:STAT {state}",
+            "get_sweep_state": ":STYL:SWEP:STAT?",
+            "get_errors": ":SYST:ERR?"
+        },
+        "modulation_commands": {
+            "set_modulation": ":MOD:{mod_type} {state}"
+        }
+    },
+    "NRP50S": {
+        "commands": {
+            "reset": "*RST",
+            "clear_status": "*CLS",
+            "set_power_unit": "UNIT:POW DBM",
+            "set_continuous_mode": "INIT:CONT ON",
+            "set_auto_averaging": "SENS:AVER:AUTO ON",
+            "initiate": "INIT",
+            "set_frequency": "SENS:FREQ {freq_hz}",
+            "set_frequency_correction": "SENS:FREQ:CORR {offset_db}",
+            "set_averaging": "SENS:AVER:COUN {count}",
+            "fetch_power": "FETC?",
+            "get_errors": "SYST:ERR?"
+        }
+    }
+}
