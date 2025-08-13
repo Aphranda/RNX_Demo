@@ -35,6 +35,7 @@ env/
 venv/
 .idea/
 .Python
+output/
 
 # 临时文件
 *.bak
